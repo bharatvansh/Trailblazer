@@ -1,17 +1,17 @@
 package com.trailblazer.fabric.networking.payload.s2c;
 
 import com.trailblazer.fabric.TrailblazerFabricClient;
-import net.minecraft.network.RegistryByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.network.packet.CustomPayload;
-import net.minecraft.util.Identifier;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.Identifier;
 
 import java.nio.charset.StandardCharsets;
 
-public record LivePathUpdatePayload(String json) implements CustomPayload {
-    public static final Id<LivePathUpdatePayload> ID = new Id<>(Identifier.of(TrailblazerFabricClient.MOD_ID, "live_path_update"));
-    public static final PacketCodec<RegistryByteBuf, LivePathUpdatePayload> CODEC = PacketCodec.of(
-        (value, buf) -> buf.writeString(value.json),
+public record LivePathUpdatePayload(String json) implements CustomPacketPayload {
+    public static final Type<LivePathUpdatePayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(TrailblazerFabricClient.MOD_ID, "live_path_update"));
+    public static final StreamCodec<RegistryFriendlyByteBuf, LivePathUpdatePayload> CODEC = StreamCodec.of(
+        (buf, value) -> buf.writeUtf(value.json),
         (buf) -> {
             byte[] bytes = new byte[buf.readableBytes()];
             buf.readBytes(bytes);
@@ -20,7 +20,7 @@ public record LivePathUpdatePayload(String json) implements CustomPayload {
     );
 
     @Override
-    public Id<? extends CustomPayload> getId() {
-        return ID;
+    public Type<? extends CustomPacketPayload> type() {
+        return TYPE;
     }
 }

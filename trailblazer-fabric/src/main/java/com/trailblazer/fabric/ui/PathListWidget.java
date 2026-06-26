@@ -4,17 +4,17 @@ import com.trailblazer.api.PathData;
 import com.trailblazer.fabric.ClientPathManager;
 import com.trailblazer.fabric.ClientPathManager.PathOrigin;
 import com.trailblazer.fabric.networking.payload.c2s.SharePathRequestPayload;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.ElementListWidget;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.ContainerObjectSelectionList;
+import net.minecraft.network.chat.Component;
+import net.minecraft.ChatFormatting;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+
 import java.util.List;
 
-public class PathListWidget extends ElementListWidget<PathListWidget.PathEntry> {
+public class PathListWidget extends ContainerObjectSelectionList<PathListWidget.PathEntry> {
     private double targetScrollAmount = -1.0;
     private double scrollVelocity = 0.0;
     private int lastMouseX;
@@ -29,58 +29,17 @@ public class PathListWidget extends ElementListWidget<PathListWidget.PathEntry> 
     private static final int ROW_BG_HOVER      = 0x5A000000;
     private static final int SEPARATOR         = 0x40FFFFFF;
 
-    public PathListWidget(MinecraftClient client, int width, int height, int top, int itemHeight) {
+    public PathListWidget(Minecraft client, int width, int height, int top, int itemHeight) {
         super(client, width, height, top, Math.max(itemHeight, 36));
-        boolean disabledViaMethod = false;
-        try {
-            Class<?> c = net.minecraft.client.gui.widget.ElementListWidget.class;
-            while (c != null && !disabledViaMethod) {
-                for (java.lang.reflect.Method m : c.getDeclaredMethods()) {
-                    if (m.getName().equals("setRenderBackground")
-                            && m.getParameterCount() == 1
-                            && m.getParameterTypes()[0] == boolean.class) {
-                        m.setAccessible(true);
-                        m.invoke(this, false);
-                        disabledViaMethod = true;
-                        break;
-                    }
-                }
-                c = c.getSuperclass();
-            }
-        } catch (Throwable t) {
-        }
-        if (!disabledViaMethod) {
-            try {
-                Class<?> c = net.minecraft.client.gui.widget.ElementListWidget.class;
-                boolean fieldSet = false;
-                while (c != null && !fieldSet) {
-                    for (java.lang.reflect.Field f : c.getDeclaredFields()) {
-                        if (f.getType() == boolean.class && f.getName().equals("renderBackground")) {
-                            f.setAccessible(true);
-                            f.setBoolean(this, false);
-                            fieldSet = true;
-                            break;
-                        }
-                    }
-                    c = c.getSuperclass();
-                }
-            } catch (Throwable t) {
-                // Background disabling failed silently - not critical
-            }
-        }
     }
 
     @Override
-    protected void drawMenuListBackground(DrawContext context) {
-        // Suppressed - using custom background rendering
-    }
-
-    protected void drawInWorldMenuListBackground(DrawContext context) {
+    protected void extractListBackground(GuiGraphicsExtractor context) {
         // Suppressed - using custom background rendering
     }
 
     @Override
-    protected void renderList(DrawContext context, int mouseX, int mouseY, float delta) {
+    protected void extractListItems(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         this.lastMouseX = mouseX;
         this.lastMouseY = mouseY;
         this.lastTickDelta = delta;
@@ -94,7 +53,7 @@ public class PathListWidget extends ElementListWidget<PathListWidget.PathEntry> 
         context.fill(left, bottom - 1, right, bottom, SEPARATOR);
 
         if (targetScrollAmount < 0.0) {
-            targetScrollAmount = this.getScrollY();
+            targetScrollAmount = this.scrollAmount();
         }
 
         double dt = Math.max(0.0, Math.min(delta, 1.0));
@@ -106,7 +65,7 @@ public class PathListWidget extends ElementListWidget<PathListWidget.PathEntry> 
             if (Math.abs(scrollVelocity) < MIN_VELOCITY) scrollVelocity = 0.0;
         }
 
-        double max = this.getMaxScrollY();
+        double max = this.maxScrollAmount();
         if (targetScrollAmount <= 0.0) {
             targetScrollAmount = 0.0;
             if (scrollVelocity < 0) scrollVelocity *= -0.2;
@@ -114,29 +73,23 @@ public class PathListWidget extends ElementListWidget<PathListWidget.PathEntry> 
             targetScrollAmount = max;
             if (scrollVelocity > 0) scrollVelocity *= -0.2;
         }
-        this.setScrollY(targetScrollAmount);
-        int contentTop = top + 1;
-        int contentBottom = bottom - 1;
-        context.enableScissor(left, contentTop, right, contentBottom);
-        super.renderList(context, mouseX, mouseY, delta);
-        context.disableScissor();
+        this.setScrollAmount(targetScrollAmount);
+        this.enableScissor(context);
+        super.extractListItems(context, mouseX, mouseY, delta);
     }
 
-    public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
         if (!this.isMouseOver(mouseX, mouseY)) return false;
-        if (targetScrollAmount < 0.0) targetScrollAmount = this.getScrollY();
-        double base = Math.max(this.itemHeight * 0.35, 8.0);
-        double deltaV = -amount * base * 1.2;
+        if (targetScrollAmount < 0.0) targetScrollAmount = this.scrollAmount();
+        double base = Math.max(this.defaultEntryHeight * 0.35, 8.0);
+        double deltaV = -verticalAmount * base * 1.2;
         if (deltaV > 180.0) deltaV = 180.0;
         if (deltaV < -180.0) deltaV = -180.0;
         scrollVelocity += deltaV;
         if (scrollVelocity > MAX_VELOCITY) scrollVelocity = MAX_VELOCITY;
         if (scrollVelocity < -MAX_VELOCITY) scrollVelocity = -MAX_VELOCITY;
         return true;
-    }
-
-    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        return mouseScrolled(mouseX, mouseY, verticalAmount);
     }
 
     @Override
@@ -147,14 +100,6 @@ public class PathListWidget extends ElementListWidget<PathListWidget.PathEntry> 
     @Override
     public int getRowBottom(int index) {
         return super.getRowBottom(index) - 3;
-    }
-
-    @Override
-    protected void drawHeaderAndFooterSeparators(DrawContext context) {
-    }
-
-    @Override
-    protected void drawSelectionHighlight(DrawContext context, PathEntry entry, int y) {
     }
 
     @Override
@@ -170,16 +115,16 @@ public class PathListWidget extends ElementListWidget<PathListWidget.PathEntry> 
         return super.addEntry(entry);
     }
 
-    public class PathEntry extends ElementListWidget.Entry<PathEntry> {
+    public class PathEntry extends ContainerObjectSelectionList.Entry<PathEntry> {
         private final PathData path;
         private final ClientPathManager pathManager;
         private final boolean isMyPath;
         private final PathOrigin origin;
-        private final ButtonWidget toggleButton;
-        private final ButtonWidget shareButton;
-    private final net.minecraft.text.Text shareDisabledTooltip;
-        private final ButtonWidget editButton;
-        private final ButtonWidget deleteButton;
+        private final Button toggleButton;
+        private final Button shareButton;
+        private final Component shareDisabledTooltip;
+        private final Button editButton;
+        private final Button deleteButton;
         private boolean awaitingDeleteConfirm = false;
         private long deleteConfirmStartMs = 0L;
         private static final long CONFIRM_TIMEOUT_MS = 5000L;
@@ -190,64 +135,64 @@ public class PathListWidget extends ElementListWidget<PathListWidget.PathEntry> 
             this.isMyPath = isMyPath;
             this.origin = pathManager.getPathOrigin(path.getPathId());
 
-            this.toggleButton = ButtonWidget.builder(getToggleButtonText(), button -> {
+            this.toggleButton = Button.builder(getToggleButtonText(), button -> {
                 pathManager.togglePathVisibility(path.getPathId());
                 button.setMessage(getToggleButtonText());
             }).build();
 
-            this.shareButton = ButtonWidget.builder(Text.of("Share"), button -> {
-                MinecraftClient.getInstance().setScreen(new PlayerSelectionScreen(path, MinecraftClient.getInstance().currentScreen));
+            this.shareButton = Button.builder(Component.literal("Share"), button -> {
+                Minecraft.getInstance().setScreenAndShow(new PlayerSelectionScreen(path, Minecraft.getInstance().gui.screen()));
             }).build();
-            boolean canSend = ClientPlayNetworking.canSend(SharePathRequestPayload.ID);
+            boolean canSend = ClientPlayNetworking.canSend(SharePathRequestPayload.TYPE);
             boolean originAllows = (origin == PathOrigin.LOCAL || origin == PathOrigin.SERVER_OWNED);
             boolean canShare = canSend && originAllows;
             this.shareButton.active = canShare;
             if (!canSend) {
-                this.shareDisabledTooltip = Text.of("Server-side plugin required");
+                this.shareDisabledTooltip = Component.literal("Server-side plugin required");
             } else {
                 this.shareDisabledTooltip = null;
             }
-
-            this.editButton = ButtonWidget.builder(Text.of("Edit"), button -> {
-                MinecraftClient.getInstance().setScreen(new PathCreationScreen(pathManager, updatedPath -> {
+ 
+            this.editButton = Button.builder(Component.literal("Edit"), button -> {
+                Minecraft.getInstance().setScreenAndShow(new PathCreationScreen(pathManager, updatedPath -> {
                     pathManager.onPathUpdated(updatedPath);
-                }, path, MinecraftClient.getInstance().currentScreen));
+                }, path, Minecraft.getInstance().gui.screen()));
             }).build();
             if (!(origin == PathOrigin.LOCAL || origin == PathOrigin.SERVER_OWNED)) {
                 this.editButton.active = false;
-                this.editButton.setMessage(Text.of("View"));
+                this.editButton.setMessage(Component.literal("View"));
             }
 
-            this.deleteButton = ButtonWidget.builder(Text.of("Delete"), button -> {
+            this.deleteButton = Button.builder(Component.literal("Delete"), button -> {
                 long now = System.currentTimeMillis();
                 if (!awaitingDeleteConfirm || now - deleteConfirmStartMs > CONFIRM_TIMEOUT_MS) {
                     awaitingDeleteConfirm = true;
                     deleteConfirmStartMs = now;
-                    button.setMessage(Text.of("Confirm"));
+                    button.setMessage(Component.literal("Confirm"));
                     return;
                 }
                 awaitingDeleteConfirm = false;
                 switch (origin) {
                     case LOCAL -> {
                         pathManager.deletePath(path.getPathId());
-                        button.setMessage(Text.of("Delete"));
+                        button.setMessage(Component.literal("Delete"));
                     }
                     case SERVER_OWNED -> {
-                        if (ClientPlayNetworking.canSend(com.trailblazer.fabric.networking.payload.c2s.DeletePathPayload.ID)) {
-                            net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
+                        if (ClientPlayNetworking.canSend(com.trailblazer.fabric.networking.payload.c2s.DeletePathPayload.TYPE)) {
+                            ClientPlayNetworking.send(
                                     new com.trailblazer.fabric.networking.payload.c2s.DeletePathPayload(path.getPathId()));
                         }
                         pathManager.removeServerPath(path.getPathId());
-                        button.setMessage(Text.of("Delete"));
+                        button.setMessage(Component.literal("Delete"));
                     }
                     case SERVER_SHARED -> {
                         pathManager.removeSharedPath(path.getPathId());
-                        button.setMessage(Text.of("Remove"));
+                        button.setMessage(Component.literal("Remove"));
                     }
                 }
             }).build();
             if (origin == PathOrigin.SERVER_SHARED) {
-                this.deleteButton.setMessage(Text.of("Remove"));
+                this.deleteButton.setMessage(Component.literal("Remove"));
             }
             if (origin == PathOrigin.SERVER_SHARED) {
                 this.shareButton.active = false;
@@ -255,10 +200,7 @@ public class PathListWidget extends ElementListWidget<PathListWidget.PathEntry> 
         }
 
         @Override
-        public void render(DrawContext context, int mouseX, int mouseY, boolean hovered, float tickDelta) {
-            // In modern MC versions, list entries receive (mouseX, mouseY) here.
-            // The entry's actual position is managed by EntryListWidget via getX/getY/getWidth/getHeight.
-
+        public void extractContent(GuiGraphicsExtractor context, int mouseX, int mouseY, boolean hovered, float tickDelta) {
             tickDelta = PathListWidget.this.lastTickDelta;
 
             int rowLeft = this.getX();
@@ -266,14 +208,11 @@ public class PathListWidget extends ElementListWidget<PathListWidget.PathEntry> 
             int rowRight = rowLeft + this.getWidth();
             int rowBottom = rowTop + this.getHeight();
 
-            // Keep a small inset so the rows breathe a bit inside the list container.
             int bgLeft = rowLeft + 4;
             int bgRight = rowRight - 4;
 
             int bgColor = hovered ? ROW_BG_HOVER : ROW_BG;
             context.fill(bgLeft, rowTop, bgRight, rowBottom, bgColor);
-
-            // Single separator line per row (bottom) to avoid double-thick separators between rows.
             context.fill(bgLeft, rowBottom - 1, bgRight, rowBottom, SEPARATOR);
 
             final int topPadding = 4;
@@ -285,7 +224,7 @@ public class PathListWidget extends ElementListWidget<PathListWidget.PathEntry> 
                 int badgeColor = path.getColorArgb();
                 context.fill(baseX, textBaselineY - 1, baseX + 8, textBaselineY - 1 + 8, badgeColor);
                 if (mouseX >= baseX && mouseX <= baseX + 8 && mouseY >= textBaselineY - 1 && mouseY <= textBaselineY - 1 + 8) {
-                    context.drawTooltip(MinecraftClient.getInstance().textRenderer, getOriginTooltipText(), mouseX, mouseY);
+                    context.setTooltipForNextFrame(Minecraft.getInstance().font, getOriginTooltipText(), mouseX, mouseY);
                 }
                 baseX += 12;
             }
@@ -295,25 +234,22 @@ public class PathListWidget extends ElementListWidget<PathListWidget.PathEntry> 
             int buttonSpacing = buttonWidth + 8;
             int buttonAreaWidth = isMyPath ? (buttonSpacing * 4) : (buttonSpacing * 2);
             int availableTextWidth = (bgRight - bgLeft) - (baseX - bgLeft) - buttonAreaWidth - 8;
-            var textRenderer = MinecraftClient.getInstance().textRenderer;
+            var font = Minecraft.getInstance().font;
             String displayName = path.getPathName();
-            if (textRenderer.getWidth(displayName) > availableTextWidth) {
-                displayName = textRenderer.trimToWidth(displayName, availableTextWidth - textRenderer.getWidth("...")) + "...";
+            if (font.width(displayName) > availableTextWidth) {
+                displayName = font.plainSubstrByWidth(displayName, availableTextWidth - font.width("...")) + "...";
             }
-            // Avoid text shadow here; users reported it looks like duplicated text.
-            context.drawText(textRenderer, displayName, baseX, textBaselineY, 0xFFFFFFFF, false);
+            context.text(font, displayName, baseX, textBaselineY, 0xFFFFFFFF, false);
             if (!isMyPath || origin == PathOrigin.SERVER_SHARED) {
                 String ownerName = null;
                 String ownerText = null;
                 
                 if (origin == PathOrigin.SERVER_SHARED) {
-                    // For shared paths, show "shared by <originOwnerName>"
                     ownerName = path.getOriginOwnerName();
                     if (ownerName != null && !ownerName.isBlank()) {
                         ownerText = " (shared by " + ownerName + ")";
                     }
                 } else {
-                    // For other non-my paths, show owner
                     ownerName = path.getOwnerName();
                     if (ownerName != null && !ownerName.isBlank()) {
                         ownerText = " (by " + ownerName + ")";
@@ -321,58 +257,56 @@ public class PathListWidget extends ElementListWidget<PathListWidget.PathEntry> 
                 }
                 
                 if (ownerText != null) {
-                    int ownerX = baseX + textRenderer.getWidth(displayName);
-                    int remainingWidth = availableTextWidth - textRenderer.getWidth(displayName);
-                    if (textRenderer.getWidth(ownerText) > remainingWidth) {
-                        ownerText = textRenderer.trimToWidth(ownerText, remainingWidth - textRenderer.getWidth("...")) + "...";
+                    int ownerX = baseX + font.width(displayName);
+                    int remainingWidth = availableTextWidth - font.width(displayName);
+                    if (font.width(ownerText) > remainingWidth) {
+                        ownerText = font.plainSubstrByWidth(ownerText, remainingWidth - font.width("...")) + "...";
                     }
-                    context.drawText(textRenderer, ownerText, ownerX, textBaselineY, 0xFF999999, false);
+                    context.text(font, ownerText, ownerX, textBaselineY, 0xFF999999, false);
                 }
             }
 
             int buttonX = bgRight - (buttonWidth + 2);
             int buttonY = rowTop + buttonYOffset;
             toggleButton.setX(buttonX); toggleButton.setY(buttonY); toggleButton.setWidth(buttonWidth); toggleButton.setHeight(buttonHeight);
-            toggleButton.render(context, mouseX, mouseY, tickDelta);
+            toggleButton.extractRenderState(context, mouseX, mouseY, tickDelta);
             if (isMyPath) {
-                buttonX -= buttonSpacing; shareButton.setX(buttonX); shareButton.setY(buttonY); shareButton.setWidth(buttonWidth); shareButton.setHeight(buttonHeight); shareButton.render(context, mouseX, mouseY, tickDelta);
-                buttonX -= buttonSpacing; editButton.setX(buttonX); editButton.setY(buttonY); editButton.setWidth(buttonWidth); editButton.setHeight(buttonHeight); editButton.render(context, mouseX, mouseY, tickDelta);
+                buttonX -= buttonSpacing; shareButton.setX(buttonX); shareButton.setY(buttonY); shareButton.setWidth(buttonWidth); shareButton.setHeight(buttonHeight); shareButton.extractRenderState(context, mouseX, mouseY, tickDelta);
+                buttonX -= buttonSpacing; editButton.setX(buttonX); editButton.setY(buttonY); editButton.setWidth(buttonWidth); editButton.setHeight(buttonHeight); editButton.extractRenderState(context, mouseX, mouseY, tickDelta);
             }
-            buttonX -= buttonSpacing; deleteButton.setX(buttonX); deleteButton.setY(buttonY); deleteButton.setWidth(buttonWidth); deleteButton.setHeight(buttonHeight); deleteButton.render(context, mouseX, mouseY, tickDelta);
+            buttonX -= buttonSpacing; deleteButton.setX(buttonX); deleteButton.setY(buttonY); deleteButton.setWidth(buttonWidth); deleteButton.setHeight(buttonHeight); deleteButton.extractRenderState(context, mouseX, mouseY, tickDelta);
 
-            int coordMaxY = rowBottom - textRenderer.fontHeight - 1;
-            int originalBaseline = rowBottom - 1 - 3 - textRenderer.fontHeight;
+            int coordMaxY = rowBottom - font.lineHeight - 1;
+            int originalBaseline = rowBottom - 1 - 3 - font.lineHeight;
             int coordBaseline = Math.min(originalBaseline + 2, coordMaxY);
             if (coordBaseline >= rowTop + topPadding) {
-                drawCoordinates(context, baseX, bgRight - 10, coordBaseline, textRenderer);
+                drawCoordinates(context, baseX, bgRight - 10, coordBaseline, font);
             }
 
             if (awaitingDeleteConfirm && System.currentTimeMillis() - deleteConfirmStartMs > CONFIRM_TIMEOUT_MS) {
                 awaitingDeleteConfirm = false;
-                deleteButton.setMessage(origin == PathOrigin.SERVER_SHARED ? Text.of("Remove") : Text.of("Delete"));
+                deleteButton.setMessage(origin == PathOrigin.SERVER_SHARED ? Component.literal("Remove") : Component.literal("Delete"));
             }
 
-            // Show tooltip for disabled share button when server-side plugin is required
             if (isMyPath && shareDisabledTooltip != null) {
                 int sx = shareButton.getX();
                 int sy = shareButton.getY();
                 int sw = shareButton.getWidth();
                 int sh = shareButton.getHeight();
                 if (mouseX >= sx && mouseX <= sx + sw && mouseY >= sy && mouseY <= sy + sh) {
-                    context.drawTooltip(MinecraftClient.getInstance().textRenderer, shareDisabledTooltip, mouseX, mouseY);
+                    context.setTooltipForNextFrame(Minecraft.getInstance().font, shareDisabledTooltip, mouseX, mouseY);
                 }
             }
         }
 
-        private Text getToggleButtonText() {
+        private Component getToggleButtonText() {
             boolean isVisible = pathManager.isPathVisible(path.getPathId());
-            return Text.of("Toggle: " + (isVisible ? "ON" : "OFF"))
-                .copy()
-                .formatted(isVisible ? Formatting.DARK_GREEN : Formatting.DARK_RED);
+            return Component.literal("Toggle: " + (isVisible ? "ON" : "OFF"))
+                .withStyle(isVisible ? ChatFormatting.DARK_GREEN : ChatFormatting.DARK_RED);
         }
 
         @Override
-        public List<? extends net.minecraft.client.gui.Element> children() {
+        public List<? extends net.minecraft.client.gui.components.events.GuiEventListener> children() {
             if (isMyPath) {
                 return List.of(toggleButton, shareButton, editButton, deleteButton);
             }
@@ -380,30 +314,22 @@ public class PathListWidget extends ElementListWidget<PathListWidget.PathEntry> 
         }
 
         @Override
-        public List<? extends net.minecraft.client.gui.Selectable> selectableChildren() {
+        public List<? extends net.minecraft.client.gui.narration.NarratableEntry> narratables() {
             if (isMyPath) {
                 return List.of(toggleButton, shareButton, editButton, deleteButton);
             }
             return List.of(toggleButton, deleteButton);
         }
 
-        private Text getOriginTooltipText() {
+        private Component getOriginTooltipText() {
             return switch (origin) {
-                case LOCAL -> Text.of("Stored on this client");
-                case SERVER_OWNED -> Text.of("Provided by server (your copy)");
-                case SERVER_SHARED -> Text.of("Live server share (read-only)");
+                case LOCAL -> Component.literal("Stored on this client");
+                case SERVER_OWNED -> Component.literal("Provided by server (your copy)");
+                case SERVER_SHARED -> Component.literal("Live server share (read-only)");
             };
         }
 
-        private int originBadgeColor() {
-            return switch (origin) {
-                case LOCAL -> 0xFF4CAF50;
-                case SERVER_OWNED -> 0xFF2196F3;
-                case SERVER_SHARED -> 0xFF03A9F4;
-            };
-        }
-
-        private void drawCoordinates(DrawContext context, int baseX, int contentRightX, int yCoord, net.minecraft.client.font.TextRenderer tr) {
+        private void drawCoordinates(GuiGraphicsExtractor context, int baseX, int contentRightX, int yCoord, net.minecraft.client.gui.Font tr) {
             if (path.getPoints().isEmpty()) return;
             var startPoint = path.getPoints().get(0);
             var endPoint = path.getPoints().get(path.getPoints().size() - 1);
@@ -413,9 +339,8 @@ public class PathListWidget extends ElementListWidget<PathListWidget.PathEntry> 
             int maxWidth = contentRightX - baseX;
             if (maxWidth <= 70) return;
 
-            // Calculate distance from player to start point
             String distanceText = "";
-            MinecraftClient client = MinecraftClient.getInstance();
+            Minecraft client = Minecraft.getInstance();
             if (client.player != null) {
                 double dx = client.player.getX() - startPoint.getX();
                 double dy = client.player.getY() - startPoint.getY();
@@ -424,16 +349,16 @@ public class PathListWidget extends ElementListWidget<PathListWidget.PathEntry> 
                 distanceText = distance + " blocks away";
             }
 
-            int distanceWidth = tr.getWidth(distanceText);
-            int endWidth = tr.getWidth(endText);
+            int distanceWidth = tr.width(distanceText);
+            int endWidth = tr.width(endText);
             int availableForStart = maxWidth - endWidth - distanceWidth - 16;
             if (availableForStart < 40) return;
 
-            if (tr.getWidth(startText) > availableForStart) {
-                startText = tr.trimToWidth(startText, Math.max(availableForStart - tr.getWidth("..."), 0)) + "...";
+            if (tr.width(startText) > availableForStart) {
+                startText = tr.plainSubstrByWidth(startText, Math.max(availableForStart - tr.width("..."), 0)) + "...";
             }
 
-            int startWidth = tr.getWidth(startText);
+            int startWidth = tr.width(startText);
             int startX = baseX;
             int endX = contentRightX - endWidth;
 
@@ -446,10 +371,9 @@ public class PathListWidget extends ElementListWidget<PathListWidget.PathEntry> 
                 distanceX = maxDistanceX;
             }
 
-            // No shadow here either; keep list text crisp and avoid the "double text" look.
-            context.drawText(tr, startText, startX, yCoord, 0xFFB0B0B0, false);
-            context.drawText(tr, distanceText, distanceX, yCoord, 0xFF909090, false);
-            context.drawText(tr, endText, endX, yCoord, 0xFFB0B0B0, false);
+            context.text(tr, startText, startX, yCoord, 0xFFB0B0B0, false);
+            context.text(tr, distanceText, distanceX, yCoord, 0xFF909090, false);
+            context.text(tr, endText, endX, yCoord, 0xFFB0B0B0, false);
         }
     }
 }

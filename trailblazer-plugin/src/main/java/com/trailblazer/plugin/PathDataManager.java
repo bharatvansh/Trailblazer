@@ -98,7 +98,9 @@ public class PathDataManager {
 
                 // Only check ownership - sharedWith is no longer used for access control
                 // All shared paths are now owned copies created via ensureSharedCopy()
-                if (pathData.getOwnerUUID().equals(playerUUID)) {
+                // UPDATE: The copy-on-share pattern has been removed. Access is now granted
+                // if the player is the owner OR if they are in the sharedWith list.
+                if (pathData.getOwnerUUID().equals(playerUUID) || pathData.isSharedWith(playerUUID)) {
                     // Sanitize name post-deserialization to harden against tampered JSON
                     String original = pathData.getPathName();
                     String sanitized = PathNameSanitizer.sanitize(original);
@@ -222,126 +224,7 @@ public class PathDataManager {
         }
     }
 
-    public SharedCopyResult ensureSharedCopy(PathData source, UUID targetUuid, String targetName, UUID targetWorldUid) {
-        if (source == null || targetUuid == null || targetName == null || targetName.isBlank()) {
-            throw new IllegalArgumentException("Source path, target UUID, and target name must be provided");
-        }
-        
-        // Create a unique lock key for this specific sharing operation.
-        // Same recipient + same origin path = same lock, preventing duplicate creation.
-        UUID originPathId = resolveOriginPathId(source);
-        String lockKey = targetUuid.toString() + ":" + originPathId.toString();
-        
-        // Get or create a lock for this sharing operation.
-        // This ensures only one thread can check and create a copy for the same
-        // recipient + origin path combination at a time.
-        ReentrantLock sharingLock = sharingLocks.computeIfAbsent(lockKey, k -> new ReentrantLock());
-        
-        sharingLock.lock();
-        try {
-            // Now safely check for duplicates while holding the lock.
-            // This prevents race conditions where multiple threads might check
-            // simultaneously and both decide to create a copy.
-            List<PathData> existing = loadPaths(targetWorldUid, targetUuid);
-            Optional<PathData> alreadyOwned = existing.stream()
-                    .filter(p -> targetUuid.equals(p.getOwnerUUID()))
-                    .filter(p -> resolveOriginPathId(p).equals(originPathId))
-                    .findFirst();
-            
-            if (alreadyOwned.isPresent()) {
-                // Duplicate found! Return existing copy without creating a new one.
-                return new SharedCopyResult(alreadyOwned.get(), false);
-            }
-            
-            // No duplicate found - safe to create a new copy.
-            String newName = uniquePathName(source.getPathName(), existing);
-            List<Vector3d> copiedPoints = new ArrayList<>(source.getPoints());
-            PathData copy = new PathData(UUID.randomUUID(), newName, targetUuid, targetName,
-                    System.currentTimeMillis(), source.getDimension(), copiedPoints, source.getColorArgb());
-            copy.setOrigin(originPathId, resolveOriginOwner(source), resolveOriginOwnerName(source));
-            savePath(targetWorldUid, copy);
-            return new SharedCopyResult(copy, true);
-        } finally {
-            // Always release the lock, even if an exception occurs.
-            sharingLock.unlock();
-            
-            // Clean up the lock if it's no longer in use to prevent memory leaks.
-            // Use tryLock() to atomically check if the lock is truly free.
-            // If we can acquire it immediately, no other thread has it, so it's safe to remove.
-            if (sharingLock.tryLock()) {
-                try {
-                    // While holding the lock, check if any threads are queued.
-                    // If not, it's safe to remove since we have exclusive access.
-                    if (!sharingLock.hasQueuedThreads()) {
-                        sharingLocks.remove(lockKey, sharingLock);
-                    }
-                } finally {
-                    // Always release the lock we just acquired.
-                    sharingLock.unlock();
-                }
-            }
-            // If tryLock() failed, another thread acquired the lock, so do not remove.
-        }
-    }
 
-    private UUID resolveOriginPathId(PathData path) {
-        UUID origin = path.getOriginPathId();
-        return origin != null ? origin : path.getPathId();
-    }
-
-    private UUID resolveOriginOwner(PathData path) {
-        UUID owner = path.getOriginOwnerUUID();
-        return owner != null ? owner : path.getOwnerUUID();
-    }
-
-    private String resolveOriginOwnerName(PathData path) {
-        String originName = path.getOriginOwnerName();
-        if (originName != null && !originName.isBlank()) {
-            return originName;
-        }
-        return path.getOwnerName();
-    }
-
-    private String uniquePathName(String proposed, List<PathData> existing) {
-        // Sanitize names at the trust boundary (paths may be client-sent or tampered on disk).
-        // PathData itself sanitizes, but doing it here ensures deterministic collision checks too.
-        String base = (proposed == null || proposed.isBlank()) ? "Shared Path" : proposed.trim();
-        base = PathNameSanitizer.sanitize(base);
-        String candidate = base;
-        int index = 2;
-        while (nameExists(existing, candidate)) {
-            candidate = base + " (" + index++ + ")";
-        }
-        return candidate;
-    }
-
-    private boolean nameExists(List<PathData> existing, String candidate) {
-        String lower = candidate.toLowerCase(Locale.ROOT);
-        for (PathData path : existing) {
-            if (path.getPathName() != null && path.getPathName().toLowerCase(Locale.ROOT).equals(lower)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public static class SharedCopyResult {
-        private final PathData path;
-        private final boolean created;
-
-        public SharedCopyResult(PathData path, boolean created) {
-            this.path = path;
-            this.created = created;
-        }
-
-        public PathData getPath() {
-            return path;
-        }
-
-        public boolean wasCreated() {
-            return created;
-        }
-    }
 
     public void renamePath(UUID worldUid, UUID playerUUID, UUID pathId, String newName) {
         if (pathId == null) {

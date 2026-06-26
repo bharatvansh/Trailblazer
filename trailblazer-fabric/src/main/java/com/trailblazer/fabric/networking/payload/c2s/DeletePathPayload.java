@@ -4,20 +4,20 @@ import java.util.UUID;
 
 import com.trailblazer.fabric.TrailblazerFabricClient;
 
-import net.minecraft.network.RegistryByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.network.packet.CustomPayload;
-import net.minecraft.util.Identifier;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.Identifier;
 
-public record DeletePathPayload(UUID pathId) implements CustomPayload {
-    public static final Id<DeletePathPayload> ID = new Id<>(Identifier.of(TrailblazerFabricClient.MOD_ID, "delete_path"));
-    public static final PacketCodec<RegistryByteBuf, DeletePathPayload> CODEC = PacketCodec.of(
-        (value, buf) -> buf.writeUuid(value.pathId()),
-        buf -> new DeletePathPayload(buf.readUuid())
+public record DeletePathPayload(UUID pathId) implements CustomPacketPayload {
+    public static final Type<DeletePathPayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(TrailblazerFabricClient.MOD_ID, "delete_path"));
+    public static final StreamCodec<RegistryFriendlyByteBuf, DeletePathPayload> CODEC = StreamCodec.of(
+        (buf, value) -> buf.writeUUID(value.pathId()),
+        buf -> new DeletePathPayload(buf.readUUID())
     );
 
     @Override
-    public Id<? extends CustomPayload> getId() {
-        return ID;
+    public Type<? extends CustomPacketPayload> type() {
+        return TYPE;
     }
 }

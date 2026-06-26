@@ -5,38 +5,39 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
-import net.minecraft.client.option.KeyBinding;
-import net.minecraft.client.util.InputUtil;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
-import net.minecraft.util.Identifier;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
+import com.mojang.blaze3d.platform.InputConstants;
+import net.minecraft.network.chat.Component;
+import net.minecraft.ChatFormatting;
+import net.minecraft.resources.Identifier;
 
 public class KeyBindingManager {
     private static final Logger LOGGER = LoggerFactory.getLogger(KeyBindingManager.class);
 
-    private static final KeyBinding.Category KEY_CATEGORY = KeyBinding.Category.create(Identifier.of("trailblazer", "trailblazer"));
+    private static final KeyMapping.Category KEY_CATEGORY = KeyMapping.Category.register(Identifier.fromNamespaceAndPath("trailblazer", "trailblazer"));
 
-    private static KeyBinding toggleRecordingKey;
-    private static KeyBinding cycleRenderModeKey;
-    private static KeyBinding openMenuKey;
+    private static KeyMapping toggleRecordingKey;
+    private static KeyMapping cycleRenderModeKey;
+    private static KeyMapping openMenuKey;
 
     public static void initialize(RenderSettingsManager renderSettingsManager, ClientPathManager clientPathManager) {
-        toggleRecordingKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+        toggleRecordingKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.trailblazer.toggle_recording",
-                InputUtil.Type.KEYSYM,
+                InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_R,
                 KEY_CATEGORY));
 
-        cycleRenderModeKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+        cycleRenderModeKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.trailblazer.cycle_render_mode",
-                InputUtil.Type.KEYSYM,
+                InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_G,
                 KEY_CATEGORY));
         
-        openMenuKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+        openMenuKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
                 "key.trailblazer.open_menu",
-                InputUtil.Type.KEYSYM,
+                InputConstants.Type.KEYSYM,
                 GLFW.GLFW_KEY_M,
                 KEY_CATEGORY));
 
@@ -45,7 +46,7 @@ public class KeyBindingManager {
 
     private static void registerKeyListeners(RenderSettingsManager renderSettingsManager, ClientPathManager clientPathManager) {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            while (toggleRecordingKey.wasPressed()) {
+            while (toggleRecordingKey.consumeClick()) {
                 if (client.player != null) {
                     boolean isRecording = clientPathManager.isRecording();
                     boolean useServer = clientPathManager.shouldUseServerRecording();
@@ -55,35 +56,35 @@ public class KeyBindingManager {
                     if (isRecording) {
                         if (useServer) {
                             clientPathManager.sendStopRecordingRequest(true);
-                            client.player.sendMessage(Text.literal("Stopping server-side recording...").formatted(Formatting.GREEN), true);
+                            client.player.sendOverlayMessage(Component.literal("Stopping server-side recording...").withStyle(ChatFormatting.GREEN));
                         } else {
                             clientPathManager.stopRecordingLocal();
-                            client.player.sendMessage(Text.literal("Stopped local recording.").formatted(Formatting.GREEN), true);
+                            client.player.sendOverlayMessage(Component.literal("Stopped local recording.").withStyle(ChatFormatting.GREEN));
                         }
                     } else {
                         if (useServer) {
                             LOGGER.info("Keybinding: Using SERVER recording");
                             clientPathManager.sendStartRecordingRequest(null);
-                            client.player.sendMessage(Text.literal("Started server-side recording.").formatted(Formatting.GREEN), true);
+                            client.player.sendOverlayMessage(Component.literal("Started server-side recording.").withStyle(ChatFormatting.GREEN));
                         } else {
                             LOGGER.info("Keybinding: Using LOCAL recording");
                             clientPathManager.startRecordingLocal();
-                            client.player.sendMessage(Text.literal("Started local recording.").formatted(Formatting.GREEN), true);
+                            client.player.sendOverlayMessage(Component.literal("Started local recording.").withStyle(ChatFormatting.GREEN));
                         }
                     }
                 }
             }
 
-            while (cycleRenderModeKey.wasPressed()) {
+            while (cycleRenderModeKey.consumeClick()) {
                 if (client.player != null) {
                     LOGGER.info("Cycle render mode key pressed.");
                     renderSettingsManager.cycleRenderMode();
                 }
             }
 
-            while (openMenuKey.wasPressed()) {
+            while (openMenuKey.consumeClick()) {
                 if (client.player != null) {
-                    client.setScreen(new com.trailblazer.fabric.ui.MainMenuScreen(clientPathManager, renderSettingsManager));
+                    client.setScreenAndShow(new com.trailblazer.fabric.ui.MainMenuScreen(clientPathManager, renderSettingsManager));
                 }
             }
         });

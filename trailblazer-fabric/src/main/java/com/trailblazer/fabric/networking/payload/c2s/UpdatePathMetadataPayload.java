@@ -5,30 +5,30 @@ import java.util.UUID;
 
 import com.trailblazer.fabric.TrailblazerFabricClient;
 
-import net.minecraft.network.RegistryByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.network.packet.CustomPayload;
-import net.minecraft.util.Identifier;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.Identifier;
 
-public record UpdatePathMetadataPayload(UUID pathId, String name, int colorArgb) implements CustomPayload {
-    public static final CustomPayload.Id<UpdatePathMetadataPayload> ID =
-            new CustomPayload.Id<>(Identifier.of(TrailblazerFabricClient.MOD_ID, "update_path_metadata"));
+public record UpdatePathMetadataPayload(UUID pathId, String name, int colorArgb) implements CustomPacketPayload {
+    public static final Type<UpdatePathMetadataPayload> TYPE =
+            new Type<>(Identifier.fromNamespaceAndPath(TrailblazerFabricClient.MOD_ID, "update_path_metadata"));
 
-    public static final PacketCodec<RegistryByteBuf, UpdatePathMetadataPayload> CODEC = PacketCodec.of(
+    public static final StreamCodec<RegistryFriendlyByteBuf, UpdatePathMetadataPayload> CODEC = StreamCodec.of(
             UpdatePathMetadataPayload::write,
             UpdatePathMetadataPayload::read
     );
 
-    private static void write(UpdatePathMetadataPayload value, RegistryByteBuf buf) {
-        buf.writeUuid(value.pathId());
+    private static void write(RegistryFriendlyByteBuf buf, UpdatePathMetadataPayload value) {
+        buf.writeUUID(value.pathId());
         buf.writeInt(value.colorArgb());
         byte[] nameBytes = value.name().getBytes(StandardCharsets.UTF_8);
         buf.writeVarInt(nameBytes.length);
         buf.writeBytes(nameBytes);
     }
 
-    private static UpdatePathMetadataPayload read(RegistryByteBuf buf) {
-        UUID id = buf.readUuid();
+    private static UpdatePathMetadataPayload read(RegistryFriendlyByteBuf buf) {
+        UUID id = buf.readUUID();
         int color = buf.readInt();
         int length = buf.readVarInt();
         byte[] nameBytes = new byte[length];
@@ -38,7 +38,7 @@ public record UpdatePathMetadataPayload(UUID pathId, String name, int colorArgb)
     }
 
     @Override
-    public Id<? extends CustomPayload> getId() {
-        return ID;
+    public Type<? extends CustomPacketPayload> type() {
+        return TYPE;
     }
 }

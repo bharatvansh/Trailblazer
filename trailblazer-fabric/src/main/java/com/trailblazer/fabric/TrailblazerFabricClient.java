@@ -18,7 +18,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.minecraft.util.WorldSavePath;
+import net.minecraft.world.level.storage.LevelResource;
 
 
 public class TrailblazerFabricClient implements ClientModInitializer {
@@ -59,7 +59,10 @@ public class TrailblazerFabricClient implements ClientModInitializer {
         LOGGER.info("Registered Trailblazer networking payload types (including recording payloads)");
         ClientPacketHandler.registerS2CPackets(clientPathManager);
         if (config.recordingOverlayEnabled) {
-            net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback.EVENT.register(new RecordingOverlay(clientPathManager));
+            net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry.addLast(
+                net.minecraft.resources.Identifier.fromNamespaceAndPath(MOD_ID, "recording_overlay"),
+                new RecordingOverlay(clientPathManager)
+            );
         }
 
         registerWorldLifecycle();
@@ -73,7 +76,7 @@ public class TrailblazerFabricClient implements ClientModInitializer {
     private void registerHandshakeSender() {
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
             client.execute(() -> {
-                if (ClientPlayNetworking.canSend(HandshakePayload.ID)) {
+                if (ClientPlayNetworking.canSend(HandshakePayload.TYPE)) {
                     LOGGER.info("Sending Trailblazer handshake to server...");
                     ClientPlayNetworking.send(new HandshakePayload());
                 }
@@ -85,18 +88,18 @@ public class TrailblazerFabricClient implements ClientModInitializer {
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
             client.execute(() -> {
                 ClientPacketHandler.resetReliableActionState();
-                clientPathManager.setLocalPlayerUuid(client.getSession().getUuidOrNull());
+                clientPathManager.setLocalPlayerUuid(client.getUser() != null ? client.getUser().getProfileId() : null);
                 clientPathManager.applyServerSync(java.util.Collections.emptyList());
                 clientPathManager.clearLocalPaths();
-                if (client.getServer() != null) {
+                if (client.getSingleplayerServer() != null) {
                     // Use the authoritative save path from the integrated server to avoid folder/display name mismatches
-                    java.nio.file.Path worldPath = client.getServer().getSavePath(WorldSavePath.ROOT);
+                    java.nio.file.Path worldPath = client.getSingleplayerServer().getWorldPath(LevelResource.ROOT);
                     persistence.setWorldDirectory(worldPath);
                     // Singleplayer: local paths are part of the same world; keep visible on load
                     persistence.setDefaultVisibleOnLoad(true);
                     persistence.loadAll();
                 } else {
-                    String serverKey = handler.getConnection().getAddress().toString().replaceAll("[^a-zA-Z0-9-_]", "_");
+                    String serverKey = handler.getConnection().getRemoteAddress().toString().replaceAll("[^a-zA-Z0-9-_]", "_");
                     java.nio.file.Path dir = net.fabricmc.loader.api.FabricLoader.getInstance().getGameDir()
                             .resolve("trailblazer_client_servers")
                             .resolve(serverKey);

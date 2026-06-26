@@ -470,7 +470,6 @@ public class PathCommand implements CommandExecutor {
             if (path.getOwnerUUID().equals(player.getUniqueId())) {
                 List<String> succeeded = new ArrayList<>();
                 List<String> alreadyHad = new ArrayList<>();
-                List<String> queuedOtherWorld = new ArrayList<>();
                 java.util.Map<String, String> failed = new java.util.HashMap<>();
 
                 java.util.UUID sourceWorldUid = player.getWorld().getUID();
@@ -481,18 +480,17 @@ public class PathCommand implements CommandExecutor {
                         continue;
                     }
 
-                    PathDataManager.SharedCopyResult result = pathDataManager.ensureSharedCopy(path, targetPlayer.getUniqueId(), targetPlayer.getName(), sourceWorldUid);
-                    PathData sharedCopy = result.getPath();
-                    if (!result.wasCreated()) {
-                        // The target already has a copy (idempotent behavior)
+                    if (path.isSharedWith(targetPlayer.getUniqueId())) {
+                        // The target already has access (idempotent behavior)
                         alreadyHad.add(targetPlayer.getName());
                         continue;
                     }
 
+                    path.addShare(targetPlayer.getUniqueId());
+
                     // Avoid cross-world bleeding: only deliver/render immediately if they're in the same world.
                     if (!sourceWorldUid.equals(targetPlayer.getWorld().getUID())) {
-                        queuedOtherWorld.add(targetPlayer.getName());
-                        targetPlayer.sendMessage(Component.text(player.getName() + " shared a path with you: " + sharedCopy.getPathName() + ". It will appear when you join their world.", NamedTextColor.AQUA));
+                        targetPlayer.sendMessage(Component.text(player.getName() + " shared a path with you: " + path.getPathName() + ". It will appear when you join their world.", NamedTextColor.AQUA));
                         succeeded.add(targetPlayer.getName());
                         continue;
                     }
@@ -504,12 +502,12 @@ public class PathCommand implements CommandExecutor {
 
                     try {
                         if (targetIsModded) {
-                            plugin.getServerPacketHandler().sendSharePath(targetPlayer, sharedCopy);
-                            targetPlayer.sendMessage(Component.text(player.getName() + " has shared a path with you: " + sharedCopy.getPathName(), NamedTextColor.AQUA));
+                            plugin.getServerPacketHandler().sendSharePath(targetPlayer, path);
+                            targetPlayer.sendMessage(Component.text(player.getName() + " has shared a path with you: " + path.getPathName(), NamedTextColor.AQUA));
                         } else {
-                            plugin.getPathRendererManager().startRendering(targetPlayer, sharedCopy);
-                            targetPlayer.sendMessage(Component.text(player.getName() + " has shared a path with you: " + sharedCopy.getPathName(), NamedTextColor.AQUA));
-                            targetPlayer.sendMessage(Component.text("It is now being displayed. Use '/path hide' to hide it or '/path view " + sharedCopy.getPathName() + "' to see it again.", NamedTextColor.GRAY));
+                            plugin.getPathRendererManager().startRendering(targetPlayer, path);
+                            targetPlayer.sendMessage(Component.text(player.getName() + " has shared a path with you: " + path.getPathName(), NamedTextColor.AQUA));
+                            targetPlayer.sendMessage(Component.text("It is now being displayed. Use '/path hide' to hide it or '/path view " + path.getPathName() + "' to see it again.", NamedTextColor.GRAY));
                         }
                         succeeded.add(targetPlayer.getName());
                     } catch (Exception ex) {
@@ -518,6 +516,10 @@ public class PathCommand implements CommandExecutor {
                         failed.put(targetPlayer.getName(), reason);
                     }
                 }
+                
+                if (!succeeded.isEmpty()) {
+                    pathDataManager.savePath(sourceWorldUid, path);
+                }
                 // Send a clear per-target result summary to the sender
                 if (!succeeded.isEmpty()) {
                     player.sendMessage(Component.text("Path '" + pathName + "' successfully shared with: " + String.join(", ", succeeded) + ".", NamedTextColor.GREEN));
@@ -525,9 +527,7 @@ public class PathCommand implements CommandExecutor {
                 if (!alreadyHad.isEmpty()) {
                     player.sendMessage(Component.text(String.join(", ", alreadyHad) + " already have their own copy of this path.", NamedTextColor.YELLOW));
                 }
-                if (!queuedOtherWorld.isEmpty()) {
-                    player.sendMessage(Component.text("Queued for players in another world: " + String.join(", ", queuedOtherWorld) + ".", NamedTextColor.GRAY));
-                }
+
                 if (!failed.isEmpty()) {
                     StringBuilder sb = new StringBuilder();
                     failed.forEach((name, reason) -> sb.append(name).append(" (" + reason + ")").append(", "));

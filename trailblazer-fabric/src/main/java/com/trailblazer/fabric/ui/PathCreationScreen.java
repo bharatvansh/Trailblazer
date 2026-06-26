@@ -5,12 +5,12 @@ import com.trailblazer.fabric.ClientPathManager;
 import com.trailblazer.fabric.ClientPathManager.PathOrigin;
 import com.trailblazer.fabric.networking.payload.c2s.UpdatePathMetadataPayload;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.widget.ButtonWidget;
-import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.text.Text;
-import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.network.chat.Component;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -21,11 +21,11 @@ public class PathCreationScreen extends Screen {
     private final Consumer<PathData> onSave;
     private final PathData editingPath;
     private Screen parentScreen = null;
-    private TextFieldWidget nameField;
-    private ButtonWidget saveButton;
-    private ButtonWidget cancelButton;
-    private ButtonWidget cycleColorButton;
-    private TextFieldWidget hexColorField;
+    private EditBox nameField;
+    private Button saveButton;
+    private Button cancelButton;
+    private Button cycleColorButton;
+    private EditBox hexColorField;
     private int workingColor = 0;
 
     public PathCreationScreen(ClientPathManager pathManager, Consumer<PathData> onSave) {
@@ -33,7 +33,7 @@ public class PathCreationScreen extends Screen {
     }
 
     public PathCreationScreen(ClientPathManager pathManager, Consumer<PathData> onSave, PathData editingPath) {
-        super(editingPath == null ? Text.of("Create New Path") : Text.of("Edit Path"));
+        super(editingPath == null ? Component.literal("Create New Path") : Component.literal("Edit Path"));
         this.pathManager = pathManager;
         this.onSave = onSave;
         this.editingPath = editingPath;
@@ -56,18 +56,18 @@ public class PathCreationScreen extends Screen {
         int fieldX = this.width / 2 - fieldWidth / 2;
         int fieldY = this.height / 2 - fieldHeight / 2;
 
-        nameField = new TextFieldWidget(this.textRenderer, fieldX, fieldY, fieldWidth, fieldHeight, Text.of("Path Name"));
+        nameField = new EditBox(this.font, fieldX, fieldY, fieldWidth, fieldHeight, Component.literal("Path Name"));
         if (editingPath != null) {
-            nameField.setText(editingPath.getPathName());
+            nameField.setValue(editingPath.getPathName());
             workingColor = editingPath.getColorArgb();
         }
-        this.addDrawableChild(nameField);
+        this.addRenderableWidget(nameField);
 
         int buttonWidth = 90;
         int buttonHeight = 20;
         int buttonY = fieldY + fieldHeight + 10;
 
-        cycleColorButton = ButtonWidget.builder(Text.of(colorButtonLabel()), button -> {
+        cycleColorButton = Button.builder(Component.literal(colorButtonLabel()), button -> {
             java.util.List<Integer> palette = com.trailblazer.api.PathColors.palette();
             if (workingColor == 0) {
                 workingColor = palette.get(0);
@@ -78,28 +78,28 @@ public class PathCreationScreen extends Screen {
                 }
                 workingColor = palette.get((idx + 1) % palette.size());
             }
-            cycleColorButton.setMessage(Text.of(colorButtonLabel()));
+            cycleColorButton.setMessage(Component.literal(colorButtonLabel()));
             if (hexColorField != null) {
-                hexColorField.setText(String.format("#%06X", workingColor & 0xFFFFFF));
+                hexColorField.setValue(String.format("#%06X", workingColor & 0xFFFFFF));
             }
-        }).dimensions(this.width / 2 - buttonWidth - 5, buttonY, buttonWidth, buttonHeight).build();
-        this.addDrawableChild(cycleColorButton);
+        }).bounds(this.width / 2 - buttonWidth - 5, buttonY, buttonWidth, buttonHeight).build();
+        this.addRenderableWidget(cycleColorButton);
 
-        hexColorField = new TextFieldWidget(this.textRenderer, this.width / 2 + 5, buttonY, buttonWidth, buttonHeight, Text.of("#RRGGBB"));
+        hexColorField = new EditBox(this.font, this.width / 2 + 5, buttonY, buttonWidth, buttonHeight, Component.literal("#RRGGBB"));
         if (workingColor != 0) {
-            hexColorField.setText(String.format("#%06X", workingColor & 0xFFFFFF));
+            hexColorField.setValue(String.format("#%06X", workingColor & 0xFFFFFF));
         }
-        this.addDrawableChild(hexColorField);
+        this.addRenderableWidget(hexColorField);
 
         buttonY += 30;
 
-        saveButton = ButtonWidget.builder(Text.of("Save"), button -> {
-            String name = nameField.getText();
+        saveButton = Button.builder(Component.literal("Save"), button -> {
+            String name = nameField.getValue();
             if (name.isEmpty()) {
                 name = "New Path " + System.currentTimeMillis();
             }
 
-            String hex = hexColorField.getText();
+            String hex = hexColorField.getValue();
             java.util.Optional<Integer> parsed = com.trailblazer.api.PathColors.parse(hex);
             if (parsed.isPresent()) {
                 workingColor = parsed.get();
@@ -112,17 +112,17 @@ public class PathCreationScreen extends Screen {
                 }
                 onSave.accept(editingPath);
                 PathOrigin origin = pathManager.getPathOrigin(editingPath.getPathId());
-                if (origin == PathOrigin.SERVER_OWNED && ClientPlayNetworking.canSend(UpdatePathMetadataPayload.ID)) {
+                if (origin == PathOrigin.SERVER_OWNED && ClientPlayNetworking.canSend(UpdatePathMetadataPayload.TYPE)) {
                     int colorToSend = editingPath.getColorArgb();
                     ClientPlayNetworking.send(new UpdatePathMetadataPayload(editingPath.getPathId(), editingPath.getPathName(), colorToSend));
                 }
             } else {
                 UUID ownerUuid = pathManager.getLocalPlayerUuid() != null ? pathManager.getLocalPlayerUuid() : UUID.randomUUID();
-                String ownerName = MinecraftClient.getInstance().player != null
-                    ? MinecraftClient.getInstance().player.getGameProfile().name()
+                String ownerName = Minecraft.getInstance().player != null
+                    ? Minecraft.getInstance().player.getGameProfile().name()
                     : "Player";
-                String dimension = MinecraftClient.getInstance().world != null
-                    ? MinecraftClient.getInstance().world.getRegistryKey().getValue().toString()
+                String dimension = Minecraft.getInstance().level != null
+                    ? Minecraft.getInstance().level.dimension().identifier().toString()
                     : "minecraft:overworld";
                 PathData newPath = new PathData(UUID.randomUUID(), name, ownerUuid, ownerName, System.currentTimeMillis(), dimension, List.of());
                 if (workingColor != 0) {
@@ -131,28 +131,28 @@ public class PathCreationScreen extends Screen {
                 onSave.accept(newPath);
             }
             if (this.parentScreen != null) {
-                this.client.setScreen(this.parentScreen);
+                this.minecraft.setScreenAndShow(this.parentScreen);
             } else {
-                this.client.setScreen(null);
+                this.minecraft.setScreenAndShow(null);
             }
-        }).dimensions(this.width / 2 - buttonWidth - 5, buttonY, buttonWidth, buttonHeight).build();
+        }).bounds(this.width / 2 - buttonWidth - 5, buttonY, buttonWidth, buttonHeight).build();
 
-        cancelButton = ButtonWidget.builder(Text.of("Cancel"), button -> {
+        cancelButton = Button.builder(Component.literal("Cancel"), button -> {
             if (this.parentScreen != null) {
-                this.client.setScreen(this.parentScreen);
+                this.minecraft.setScreenAndShow(this.parentScreen);
             } else {
-                this.client.setScreen(null);
+                this.minecraft.setScreenAndShow(null);
             }
-        }).dimensions(this.width / 2 + 5, buttonY, buttonWidth, buttonHeight).build();
+        }).bounds(this.width / 2 + 5, buttonY, buttonWidth, buttonHeight).build();
 
-        this.addDrawableChild(saveButton);
-        this.addDrawableChild(cancelButton);
+        this.addRenderableWidget(saveButton);
+        this.addRenderableWidget(cancelButton);
     }
 
     @Override
-    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        super.render(context, mouseX, mouseY, delta);
-        context.drawCenteredTextWithShadow(this.textRenderer, this.title, this.width / 2, 20, 0xFFFFFF);
+    public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
+        super.extractRenderState(context, mouseX, mouseY, delta);
+        context.centeredText(this.font, this.title, this.width / 2, 20, 0xFFFFFF);
     }
 
     private String colorButtonLabel() {

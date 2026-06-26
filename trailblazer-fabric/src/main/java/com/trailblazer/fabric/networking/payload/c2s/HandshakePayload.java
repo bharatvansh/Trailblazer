@@ -2,24 +2,24 @@ package com.trailblazer.fabric.networking.payload.c2s;
 
 import com.trailblazer.fabric.TrailblazerFabricClient;
 
-import net.minecraft.network.RegistryByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.network.packet.CustomPayload;
-import net.minecraft.util.Identifier;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.Identifier;
 
 /**
  * A simple signal payload sent once by the client upon joining a server
  * to announce that it has the Trailblazer mod installed.
  */
-public record HandshakePayload() implements CustomPayload {
+public record HandshakePayload() implements CustomPacketPayload {
 
-    public static final Id<HandshakePayload> ID = new Id<>(Identifier.of(TrailblazerFabricClient.MOD_ID, "handshake"));
+    public static final Type<HandshakePayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(TrailblazerFabricClient.MOD_ID, "handshake"));
 
-    public static final PacketCodec<RegistryByteBuf, HandshakePayload> CODEC = PacketCodec.unit(new HandshakePayload());
+    public static final StreamCodec<RegistryFriendlyByteBuf, HandshakePayload> CODEC = StreamCodec.unit(new HandshakePayload());
 
     @Override
-    public Id<? extends CustomPayload> getId() {
-        return ID;
+    public Type<? extends CustomPacketPayload> type() {
+        return TYPE;
     }
 }
 

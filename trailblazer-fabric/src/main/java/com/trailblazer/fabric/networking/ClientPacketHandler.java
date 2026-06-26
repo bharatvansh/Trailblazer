@@ -35,7 +35,7 @@ public class ClientPacketHandler {
     }
 
     public static void registerS2CPackets(ClientPathManager pathManager) {
-        ClientPlayNetworking.registerGlobalReceiver(PathDataSyncPayload.ID, (payload, context) -> {
+        ClientPlayNetworking.registerGlobalReceiver(PathDataSyncPayload.TYPE, (payload, context) -> {
             String json = payload.json();
 
             final List<PathData> receivedPaths;
@@ -54,11 +54,11 @@ public class ClientPacketHandler {
             context.client().execute(() -> pathManager.applyServerSync(receivedPaths));
         });
 
-        ClientPlayNetworking.registerGlobalReceiver(HideAllPathsPayload.ID, (payload, context) -> {
+        ClientPlayNetworking.registerGlobalReceiver(HideAllPathsPayload.TYPE, (payload, context) -> {
             context.client().execute(pathManager::hideAllPaths);
         });
 
-        ClientPlayNetworking.registerGlobalReceiver(LivePathUpdatePayload.ID, (payload, context) -> {
+        ClientPlayNetworking.registerGlobalReceiver(LivePathUpdatePayload.TYPE, (payload, context) -> {
             String json = payload.json();
             final List<Vector3d> points;
             try {
@@ -74,13 +74,13 @@ public class ClientPacketHandler {
             }
         });
 
-        ClientPlayNetworking.registerGlobalReceiver(StopLivePathPayload.ID, (payload, context) -> {
+        ClientPlayNetworking.registerGlobalReceiver(StopLivePathPayload.TYPE, (payload, context) -> {
             context.client().execute(() -> {
                 pathManager.stopLivePath();
                 pathManager.stopServerRecording();
                 try {
                     if (net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.canSend(
-                            com.trailblazer.fabric.networking.payload.c2s.HandshakePayload.ID)) {
+                            com.trailblazer.fabric.networking.payload.c2s.HandshakePayload.TYPE)) {
                         net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.send(
                                 new com.trailblazer.fabric.networking.payload.c2s.HandshakePayload());
                     }
@@ -90,21 +90,21 @@ public class ClientPacketHandler {
             });
         });
 
-        ClientPlayNetworking.registerGlobalReceiver(StartRecordingPayload.ID, (payload, context) -> {
+        ClientPlayNetworking.registerGlobalReceiver(StartRecordingPayload.TYPE, (payload, context) -> {
             context.client().execute(() -> {
                 pathManager.setRecordingFromServer(payload.pathId(), payload.pathName(), payload.dimension());
             });
         });
 
-        ClientPlayNetworking.registerGlobalReceiver(SharedPathPayload.ID, (payload, context) ->
+        ClientPlayNetworking.registerGlobalReceiver(SharedPathPayload.TYPE, (payload, context) ->
             context.client().execute(() -> pathManager.applyServerShare(payload.path()))
         );
 
-        ClientPlayNetworking.registerGlobalReceiver(PathDeletedPayload.ID, (payload, context) ->
+        ClientPlayNetworking.registerGlobalReceiver(PathDeletedPayload.TYPE, (payload, context) ->
             context.client().execute(() -> pathManager.removeServerPath(payload.pathId()))
         );
 
-        ClientPlayNetworking.registerGlobalReceiver(PathActionResultPayload.ID, (payload, context) -> {
+        ClientPlayNetworking.registerGlobalReceiver(PathActionResultPayload.TYPE, (payload, context) -> {
             long sequence = payload.sequenceNumber();
             context.client().execute(() -> {
                 var client = context.client();
@@ -126,8 +126,8 @@ public class ClientPacketHandler {
                         }
 
                         if (client.player != null && payload.message() != null && !payload.message().isEmpty()) {
-                            net.minecraft.text.Style style = payload.success() ? net.minecraft.text.Style.EMPTY.withColor(net.minecraft.util.Formatting.GREEN) : net.minecraft.text.Style.EMPTY.withColor(net.minecraft.util.Formatting.RED);
-                            client.player.sendMessage(net.minecraft.text.Text.literal(payload.message()).setStyle(style), false);
+                            net.minecraft.network.chat.Style style = payload.success() ? net.minecraft.network.chat.Style.EMPTY.withColor(net.minecraft.ChatFormatting.GREEN) : net.minecraft.network.chat.Style.EMPTY.withColor(net.minecraft.ChatFormatting.RED);
+                            client.player.sendSystemMessage(net.minecraft.network.chat.Component.literal(payload.message()).setStyle(style));
                         }
                     } catch (Exception ex) {
                         TrailblazerFabricClient.LOGGER.error("Failed to handle path action result payload", ex);
@@ -146,7 +146,7 @@ public class ClientPacketHandler {
             return;
         }
 
-        if (ClientPlayNetworking.canSend(PathActionAckPayload.ID)) {
+        if (ClientPlayNetworking.canSend(PathActionAckPayload.TYPE)) {
             ClientPlayNetworking.send(new PathActionAckPayload(ackSequence));
         } else {
             TrailblazerFabricClient.LOGGER.debug("Server does not accept Trailblazer action acknowledgments yet.");

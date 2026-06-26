@@ -2,9 +2,9 @@ package com.trailblazer.fabric;
 
 import com.trailblazer.fabric.rendering.RenderMode;
 
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.toast.SystemToast;
-import net.minecraft.text.Text;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.toasts.SystemToast;
+import net.minecraft.network.chat.Component;
 
 /**
  * Manages client-side path rendering settings.
@@ -36,11 +36,11 @@ public class RenderSettingsManager {
     }
 
     private void notifyModeChanged() {
-        MinecraftClient client = MinecraftClient.getInstance();
+        Minecraft client = Minecraft.getInstance();
         if (client.player != null) {
-            Text title = Text.literal("Render Mode");
-            Text description = currentMode.getDisplayText();
-            client.getToastManager().add(new SystemToast(SystemToast.Type.PERIODIC_NOTIFICATION, title, description));
+            Component title = Component.literal("Render Mode");
+            Component description = currentMode.getDisplayText();
+            client.gui.toastManager().addToast(new SystemToast(SystemToast.SystemToastId.PERIODIC_NOTIFICATION, title, description));
         }
     }
 }

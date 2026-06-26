@@ -2,22 +2,22 @@ package com.trailblazer.fabric.networking.payload.s2c;
 
 import com.trailblazer.fabric.TrailblazerFabricClient;
 
-import net.minecraft.network.RegistryByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.network.packet.CustomPayload;
-import net.minecraft.util.Identifier;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.Identifier;
 
 /**
  * A simple signal payload sent from the server to the client to instruct
  * it to hide all currently rendered paths.
  */
-public record HideAllPathsPayload() implements CustomPayload {
+public record HideAllPathsPayload() implements CustomPacketPayload {
 
-    public static final Id<HideAllPathsPayload> ID = new Id<>(Identifier.of(TrailblazerFabricClient.MOD_ID, "hide_all_paths"));
+    public static final Type<HideAllPathsPayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(TrailblazerFabricClient.MOD_ID, "hide_all_paths"));
 
-    public static final PacketCodec<RegistryByteBuf, HideAllPathsPayload> CODEC = new PacketCodec<RegistryByteBuf, HideAllPathsPayload>() {
+    public static final StreamCodec<RegistryFriendlyByteBuf, HideAllPathsPayload> CODEC = new StreamCodec<RegistryFriendlyByteBuf, HideAllPathsPayload>() {
         @Override
-        public HideAllPathsPayload decode(RegistryByteBuf buf) {
+        public HideAllPathsPayload decode(RegistryFriendlyByteBuf buf) {
             if (buf.readableBytes() > 0) {
                 buf.readByte();
             }
@@ -25,12 +25,12 @@ public record HideAllPathsPayload() implements CustomPayload {
         }
 
         @Override
-        public void encode(RegistryByteBuf buf, HideAllPathsPayload value) {
+        public void encode(RegistryFriendlyByteBuf buf, HideAllPathsPayload value) {
         }
     };
 
     @Override
-    public Id<? extends CustomPayload> getId() {
-        return ID;
+    public Type<? extends CustomPacketPayload> type() {
+        return TYPE;
     }
 }

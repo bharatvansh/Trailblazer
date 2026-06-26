@@ -1,10 +1,10 @@
 package com.trailblazer.fabric.networking.payload.s2c;
 
 import com.trailblazer.fabric.TrailblazerFabricClient;
-import net.minecraft.network.RegistryByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.network.packet.CustomPayload;
-import net.minecraft.util.Identifier;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.Identifier;
 
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
@@ -17,15 +17,15 @@ import java.util.UUID;
  * - UUID: 16 bytes (2 longs)
  * - String: 4 bytes (int length) + UTF-8 bytes
  */
-public record StartRecordingPayload(UUID pathId, String pathName, String dimension) implements CustomPayload {
-    public static final Id<StartRecordingPayload> ID = new Id<>(Identifier.of(TrailblazerFabricClient.MOD_ID, "start_recording"));
+public record StartRecordingPayload(UUID pathId, String pathName, String dimension) implements CustomPacketPayload {
+    public static final Type<StartRecordingPayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(TrailblazerFabricClient.MOD_ID, "start_recording"));
     
-    public static final PacketCodec<RegistryByteBuf, StartRecordingPayload> CODEC = PacketCodec.of(
-        (value, buf) -> {
+    public static final StreamCodec<RegistryFriendlyByteBuf, StartRecordingPayload> CODEC = StreamCodec.of(
+        (buf, value) -> {
             // Write in Fabric format for Fabric-to-Fabric communication
-            buf.writeUuid(value.pathId);
-            buf.writeString(value.pathName);
-            buf.writeString(value.dimension);
+            buf.writeUUID(value.pathId);
+            buf.writeUtf(value.pathName);
+            buf.writeUtf(value.dimension);
         },
         (buf) -> {
             // Read in Bukkit plugin message format (compatible with server)
@@ -56,8 +56,8 @@ public record StartRecordingPayload(UUID pathId, String pathName, String dimensi
     );
 
     @Override
-    public Id<? extends CustomPayload> getId() {
-        return ID;
+    public Type<? extends CustomPacketPayload> type() {
+        return TYPE;
     }
 }
 

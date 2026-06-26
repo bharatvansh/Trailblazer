@@ -3,10 +3,10 @@ package com.trailblazer.fabric.networking.payload.s2c;
 import com.google.gson.Gson;
 import com.trailblazer.api.PathData;
 import com.trailblazer.fabric.TrailblazerFabricClient;
-import net.minecraft.network.RegistryByteBuf;
-import net.minecraft.network.codec.PacketCodec;
-import net.minecraft.network.packet.CustomPayload;
-import net.minecraft.util.Identifier;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.resources.Identifier;
 
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
@@ -17,19 +17,19 @@ import java.util.UUID;
  * and reliability metadata (sequence number + highest acknowledged sequence).
  */
 public record PathActionResultPayload(String action, UUID pathId, boolean success, String message, PathData updatedPath,
-                                     long sequenceNumber, Long acknowledgedSequence) implements CustomPayload {
-    public static final Id<PathActionResultPayload> ID = new Id<>(Identifier.of(TrailblazerFabricClient.MOD_ID, "path_action_result"));
+                                     long sequenceNumber, Long acknowledgedSequence) implements CustomPacketPayload {
+    public static final Type<PathActionResultPayload> TYPE = new Type<>(Identifier.fromNamespaceAndPath(TrailblazerFabricClient.MOD_ID, "path_action_result"));
     private static final Gson GSON = new Gson();
 
-    public static final PacketCodec<RegistryByteBuf, PathActionResultPayload> CODEC = PacketCodec.of(
+    public static final StreamCodec<RegistryFriendlyByteBuf, PathActionResultPayload> CODEC = StreamCodec.of(
             PathActionResultPayload::write,
             PathActionResultPayload::read
     );
 
-    private static void write(PathActionResultPayload value, RegistryByteBuf buf) {
+    private static void write(RegistryFriendlyByteBuf buf, PathActionResultPayload value) {
         writeUtf(buf, value.action);
         buf.writeBoolean(value.pathId != null);
-        if (value.pathId != null) buf.writeUuid(value.pathId);
+        if (value.pathId != null) buf.writeUUID(value.pathId);
         buf.writeBoolean(value.success);
         writeUtf(buf, value.message == null ? "" : value.message);
         buf.writeBoolean(value.updatedPath != null);
@@ -44,10 +44,10 @@ public record PathActionResultPayload(String action, UUID pathId, boolean succes
         }
     }
 
-    private static PathActionResultPayload read(RegistryByteBuf buf) {
+    private static PathActionResultPayload read(RegistryFriendlyByteBuf buf) {
         String action = readUtf(buf);
         UUID pid = null;
-        if (buf.readBoolean()) pid = buf.readUuid();
+        if (buf.readBoolean()) pid = buf.readUUID();
         boolean success = buf.readBoolean();
         String message = readUtf(buf);
         PathData updated = null;
@@ -63,12 +63,12 @@ public record PathActionResultPayload(String action, UUID pathId, boolean succes
         return new PathActionResultPayload(action, pid, success, message, updated, sequence, ack);
     }
 
-    private static void writeUtf(RegistryByteBuf buf, String s) {
+    private static void writeUtf(RegistryFriendlyByteBuf buf, String s) {
         byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
         buf.writeVarInt(bytes.length);
         buf.writeBytes(bytes);
     }
-    private static String readUtf(RegistryByteBuf buf) {
+    private static String readUtf(RegistryFriendlyByteBuf buf) {
         int len = buf.readVarInt();
         byte[] bytes = new byte[len];
         buf.readBytes(bytes);
@@ -76,5 +76,5 @@ public record PathActionResultPayload(String action, UUID pathId, boolean succes
     }
 
     @Override
-    public Id<? extends CustomPayload> getId() { return ID; }
+    public Type<? extends CustomPacketPayload> type() { return TYPE; }
 }

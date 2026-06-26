@@ -12,8 +12,11 @@ subprojects {
     apply plugin: 'java'
     group = 'com.trailblazer'
     version = '1.0.0'
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(25)
+        }
+    }
 
     repositories {
         mavenCentral()

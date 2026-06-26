@@ -105,7 +105,6 @@ public class ServerPacketHandler implements Listener, PluginMessageListener {
                 java.util.UUID worldUid = player.getWorld().getUID();
                 plugin.getLogger().info("Loading paths for " + player.getName() + " in world " + worldUid);
                 List<PathData> allPaths = dataManager.loadPaths(worldUid, player.getUniqueId());
-                pruneDuplicateSharedCopies(allPaths, player.getUniqueId(), worldUid);
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
                     sendAllPathData(player, allPaths);
                     if (!allPaths.isEmpty()) {
@@ -238,7 +237,6 @@ public class ServerPacketHandler implements Listener, PluginMessageListener {
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             UUID worldUid = player.getWorld().getUID();
             List<PathData> allPaths = dataManager.loadPaths(worldUid, player.getUniqueId());
-            pruneDuplicateSharedCopies(allPaths, player.getUniqueId(), worldUid);
             plugin.getServer().getScheduler().runTask(plugin, () -> sendAllPathData(player, allPaths));
         });
     }
@@ -443,11 +441,9 @@ public class ServerPacketHandler implements Listener, PluginMessageListener {
             paths.stream()
                 .filter(p -> p.getPathId().equals(pathId) && p.getOwnerUUID().equals(sender.getUniqueId()))
                 .findFirst()
-                .ifPresentOrElse(path -> {
+                .ifPresentOrElse(serverPath -> {
                     List<String> newlyShared = new ArrayList<>();
                     List<String> alreadyHad = new ArrayList<>();
-                    List<String> queuedOffline = new ArrayList<>();
-                    List<String> queuedOtherWorld = new ArrayList<>();
 
                     for (UUID targetPlayerId : playerIds) {
                         if (targetPlayerId == null || targetPlayerId.equals(sender.getUniqueId())) {
@@ -459,40 +455,35 @@ public class ServerPacketHandler implements Listener, PluginMessageListener {
                                 ? targetOnline.getName()
                                 : resolvePlayerName(targetPlayerId);
 
-                        // Persist in the sender's world folder (source world). This allows offline recipients
-                        // to receive the shared path on next join, and prevents storing paths in unrelated worlds.
-                        PathDataManager.SharedCopyResult result = dataManager.ensureSharedCopy(path, targetPlayerId, targetName, senderWorldUid);
-                        if (!result.wasCreated()) {
+                        if (serverPath.isSharedWith(targetPlayerId)) {
                             alreadyHad.add(targetName);
                             continue;
                         }
 
-                        PathData sharedCopy = result.getPath();
+                        serverPath.addShare(targetPlayerId);
                         newlyShared.add(targetName);
 
-                        if (targetOnline == null || !targetOnline.isOnline()) {
-                            queuedOffline.add(targetName);
-                            continue;
-                        }
+                        if (targetOnline != null && targetOnline.isOnline()) {
+                            java.util.UUID targetWorldUid = targetOnline.getWorld().getUID();
+                            if (!senderWorldUid.equals(targetWorldUid)) {
+                                targetOnline.sendMessage(Component.text(sender.getName() + " shared a path with you: " + serverPath.getPathName() + ". It will appear when you join their world.", NamedTextColor.AQUA));
+                                continue;
+                            }
 
-                        // Avoid cross-world bleeding: only deliver/render immediately if they're in the same world.
-                        java.util.UUID targetWorldUid = targetOnline.getWorld().getUID();
-                        if (!senderWorldUid.equals(targetWorldUid)) {
-                            queuedOtherWorld.add(targetName);
-                            targetOnline.sendMessage(Component.text(sender.getName() + " shared a path with you: " + sharedCopy.getPathName() + ". It will appear when you join their world.", NamedTextColor.AQUA));
-                            continue;
+                            boolean targetIsModded = isModdedPlayer(targetOnline);
+                            if (targetIsModded) {
+                                sendSharePath(targetOnline, serverPath);
+                                targetOnline.sendMessage(Component.text(sender.getName() + " has shared a path with you: " + serverPath.getPathName(), NamedTextColor.AQUA));
+                            } else {
+                                plugin.getPathRendererManager().startRendering(targetOnline, serverPath);
+                                targetOnline.sendMessage(Component.text(sender.getName() + " has shared a path with you: " + serverPath.getPathName(), NamedTextColor.AQUA));
+                                targetOnline.sendMessage(Component.text("It is now being displayed. Use '/path hide' to hide it or '/path view " + serverPath.getPathName() + "' to see it again.", NamedTextColor.GRAY));
+                            }
                         }
+                    }
 
-                        boolean targetIsModded = isModdedPlayer(targetOnline);
-                        // Note: sharedWith is no longer used - all recipients get owned copies via ensureSharedCopy()
-                        if (targetIsModded) {
-                            sendSharePath(targetOnline, sharedCopy);
-                            targetOnline.sendMessage(Component.text(sender.getName() + " has shared a path with you: " + sharedCopy.getPathName(), NamedTextColor.AQUA));
-                        } else {
-                            plugin.getPathRendererManager().startRendering(targetOnline, sharedCopy);
-                            targetOnline.sendMessage(Component.text(sender.getName() + " has shared a path with you: " + sharedCopy.getPathName(), NamedTextColor.AQUA));
-                            targetOnline.sendMessage(Component.text("It is now being displayed. Use '/path hide' to hide it or '/path view " + sharedCopy.getPathName() + "' to see it again.", NamedTextColor.GRAY));
-                        }
+                    if (!newlyShared.isEmpty()) {
+                        dataManager.savePath(senderWorldUid, serverPath);
                     }
 
                     boolean success = !newlyShared.isEmpty();
@@ -504,19 +495,7 @@ public class ServerPacketHandler implements Listener, PluginMessageListener {
                         if (response.length() > 0) {
                             response.append(' ');
                         }
-                        response.append(String.join(", ", alreadyHad)).append(" already had their own copy.");
-                    }
-                    if (!queuedOffline.isEmpty()) {
-                        if (response.length() > 0) {
-                            response.append(' ');
-                        }
-                        response.append("Queued for offline players: ").append(String.join(", ", queuedOffline)).append('.');
-                    }
-                    if (!queuedOtherWorld.isEmpty()) {
-                        if (response.length() > 0) {
-                            response.append(' ');
-                        }
-                        response.append("Queued for players in another world: ").append(String.join(", ", queuedOtherWorld)).append('.');
+                        response.append(String.join(", ", alreadyHad)).append(" already had access.");
                     }
                     if (response.length() == 0) {
                         response.append("Selected players already have this path.");
@@ -546,7 +525,6 @@ public class ServerPacketHandler implements Listener, PluginMessageListener {
             List<PathData> updatedPaths = dataManager.updateMetadata(worldUid, player.getUniqueId(), pathId, newName, color);
             if (updatedPaths != null) {
                 PathData updatedPath = updatedPaths.stream().filter(p -> p.getPathId().equals(pathId)).findFirst().orElse(null);
-                pruneDuplicateSharedCopies(updatedPaths, player.getUniqueId(), worldUid);
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
                     sendAllPathData(player, updatedPaths);
                     sendActionResult(player, "update_metadata", pathId, true, "Path updated successfully.", updatedPath);
@@ -572,32 +550,29 @@ public class ServerPacketHandler implements Listener, PluginMessageListener {
                 targets.add(new UUID(buffer.getLong(), buffer.getLong()));
             }
             String json = readString(buffer);
-            PathData path = gson.fromJson(json, PathData.class);
-            if (path == null || !PathDataManager.isValidPathData(path)) {
+            PathData clientPath = gson.fromJson(json, PathData.class);
+            if (clientPath == null || !PathDataManager.isValidPathData(clientPath)) {
                 throw new IllegalArgumentException("Received invalid shared path data");
             }
 
             // Trust boundary: a client may spoof owner fields in JSON. For sharing, require the sender to be the owner
-            // of the submitted path (shared copies are owned by recipients in the current design).
-            if (!sender.getUniqueId().equals(path.getOwnerUUID())) {
+            if (!sender.getUniqueId().equals(clientPath.getOwnerUUID())) {
                 sendActionResult(sender, "share", null, false, "You can only share paths that you own.", null);
                 return;
             }
 
-            if (path.getOriginPathId() == null || path.getOriginOwnerUUID() == null || path.getOriginOwnerName() == null) {
-                path.setOrigin(path.getPathId(), sender.getUniqueId(), sender.getName());
+            java.util.UUID senderWorldUid = sender.getWorld().getUID();
+            List<PathData> allPaths = dataManager.loadPaths(senderWorldUid, sender.getUniqueId());
+            PathData serverPath = allPaths.stream().filter(p -> p.getPathId().equals(clientPath.getPathId())).findFirst().orElse(null);
+            
+            if (serverPath == null) {
+                sendActionResult(sender, "share", null, false, "Path not found on server.", null);
+                return;
             }
 
-            // For both modded and unmodded recipients: ensure a shared copy exists.
-            // If the recipient is modded and online, also deliver over the custom channel.
-            // NOTE: Only recipients in the same world can receive immediate delivery/rendering to avoid cross-world visuals.
             List<String> newlyShared = new ArrayList<>();
             List<String> alreadyHad = new ArrayList<>();
-            List<String> queuedOffline = new ArrayList<>();
-            List<String> queuedOtherWorld = new ArrayList<>();
             int moddedDelivered = 0;
-
-            java.util.UUID senderWorldUid = sender.getWorld().getUID();
 
             for (UUID targetId : targets) {
                 if (targetId == null || targetId.equals(sender.getUniqueId())) {
@@ -609,41 +584,40 @@ public class ServerPacketHandler implements Listener, PluginMessageListener {
                         ? targetOnline.getName()
                         : resolvePlayerName(targetId);
 
-                // Persist in sender's current world folder. This makes sharing work for offline recipients,
-                // and avoids persisting a path into a recipient's unrelated current world.
-                PathDataManager.SharedCopyResult result = dataManager.ensureSharedCopy(path, targetId, targetName, senderWorldUid);
-                PathData sharedCopy = result.getPath();
-                if (!result.wasCreated()) {
+                // Update the sharedWith list on the single server path
+                if (serverPath.isSharedWith(targetId)) {
                     alreadyHad.add(targetName);
                     continue;
                 }
 
+                serverPath.addShare(targetId);
                 newlyShared.add(targetName);
 
-                if (targetOnline == null || !targetOnline.isOnline()) {
-                    queuedOffline.add(targetName);
-                    continue;
-                }
+                if (targetOnline != null && targetOnline.isOnline()) {
+                    java.util.UUID targetWorldUid = targetOnline.getWorld().getUID();
+                    if (!senderWorldUid.equals(targetWorldUid)) {
+                        targetOnline.sendMessage(Component.text(sender.getName() + " shared a path with you: " + serverPath.getPathName() + ". It will appear when you join their world.", NamedTextColor.AQUA));
+                        continue;
+                    }
 
-                java.util.UUID targetWorldUid = targetOnline.getWorld().getUID();
-                if (!senderWorldUid.equals(targetWorldUid)) {
-                    queuedOtherWorld.add(targetName);
-                    targetOnline.sendMessage(Component.text(sender.getName() + " shared a path with you: " + sharedCopy.getPathName() + ". It will appear when you join their world.", NamedTextColor.AQUA));
-                    continue;
+                    boolean targetIsModded = isModdedPlayer(targetOnline);
+                    if (targetIsModded) {
+                        // Deliver to modded clients via payload
+                        sendSharePath(targetOnline, serverPath);
+                        targetOnline.sendMessage(Component.text(sender.getName() + " has shared a path with you: " + serverPath.getPathName(), NamedTextColor.AQUA));
+                        moddedDelivered++;
+                    } else {
+                        // Fallback: start server-side particle rendering and notify
+                        plugin.getPathRendererManager().startRendering(targetOnline, serverPath);
+                        targetOnline.sendMessage(Component.text(sender.getName() + " has shared a path with you: " + serverPath.getPathName(), NamedTextColor.AQUA));
+                        targetOnline.sendMessage(Component.text("It is now being displayed. Use '/path hide' to hide it or '/path view " + serverPath.getPathName() + "' to see it again.", NamedTextColor.GRAY));
+                    }
                 }
+            }
 
-                boolean targetIsModded = isModdedPlayer(targetOnline);
-                if (targetIsModded) {
-                    // Deliver to modded clients via payload
-                    sendSharePath(targetOnline, sharedCopy);
-                    targetOnline.sendMessage(Component.text(sender.getName() + " has shared a path with you: " + sharedCopy.getPathName(), NamedTextColor.AQUA));
-                    moddedDelivered++;
-                } else {
-                    // Fallback: start server-side particle rendering and notify
-                    plugin.getPathRendererManager().startRendering(targetOnline, sharedCopy);
-                    targetOnline.sendMessage(Component.text(sender.getName() + " has shared a path with you: " + sharedCopy.getPathName(), NamedTextColor.AQUA));
-                    targetOnline.sendMessage(Component.text("It is now being displayed. Use '/path hide' to hide it or '/path view " + sharedCopy.getPathName() + "' to see it again.", NamedTextColor.GRAY));
-                }
+            // Save the updated path if any new shares were added
+            if (!newlyShared.isEmpty()) {
+                dataManager.savePath(senderWorldUid, serverPath);
             }
 
             boolean success = !newlyShared.isEmpty() || moddedDelivered > 0;
@@ -653,22 +627,13 @@ public class ServerPacketHandler implements Listener, PluginMessageListener {
             }
             if (!alreadyHad.isEmpty()) {
                 if (response.length() > 0) response.append(' ');
-                response.append(String.join(", ", alreadyHad)).append(" already had their own copy.");
-            }
-            if (!queuedOffline.isEmpty()) {
-                if (response.length() > 0) response.append(' ');
-                response.append("Queued for offline players: ").append(String.join(", ", queuedOffline)).append('.');
-            }
-            if (!queuedOtherWorld.isEmpty()) {
-                if (response.length() > 0) response.append(' ');
-                response.append("Queued for players in another world: ").append(String.join(", ", queuedOtherWorld)).append('.');
+                response.append(String.join(", ", alreadyHad)).append(" already had access.");
             }
             if (response.length() == 0) {
-                // Nobody received a new copy, but if some were online+modded we still delivered
                 response.append(moddedDelivered > 0 ? ("Shared path with " + moddedDelivered + " player(s).") : "Selected players already have this path.");
             }
 
-            sendActionResult(sender, "share", path.getPathId(), success, response.toString(), null);
+            sendActionResult(sender, "share", serverPath.getPathId(), success, response.toString(), null);
         } catch (Exception ex) {
             plugin.getLogger().warning("Failed to process share request payload from " + sender.getName() + ": " + ex.getMessage());
             sendActionResult(sender, "share", null, false, "An error occurred while sharing the path.", null);
@@ -777,58 +742,7 @@ public class ServerPacketHandler implements Listener, PluginMessageListener {
      * This prevents multiple copies of the same path lineage from appearing in the player's path list.
      * <p>
      * IMPORTANT: This method also deletes duplicate path files from disk to prevent them from
-     * reappearing when paths are reloaded. Only the first path (by iteration order) is kept.
-     */
-    private void pruneDuplicateSharedCopies(List<PathData> paths, UUID playerId, UUID worldUid) {
-        if (paths == null || paths.isEmpty() || playerId == null || worldUid == null) {
-            return;
-        }
 
-        // Track which origins we've already seen
-        Set<UUID> seenOrigins = new HashSet<>();
-        List<PathData> pathsToRemove = new ArrayList<>();
-        
-        for (PathData path : paths) {
-            // All paths should be owned by the player (loadPaths filters), but double-check
-            if (!playerId.equals(path.getOwnerUUID())) {
-                continue;
-            }
-            
-            UUID originId = resolveLineageId(path);
-            
-            // If we've already seen this origin, mark this path for removal (duplicate)
-            if (seenOrigins.contains(originId)) {
-                pathsToRemove.add(path);
-            } else {
-                // First time seeing this origin - keep it
-                seenOrigins.add(originId);
-            }
-        }
-        
-        // Delete duplicate path files from disk and remove them from the list
-        if (!pathsToRemove.isEmpty()) {
-            int deletedCount = 0;
-            for (PathData duplicate : pathsToRemove) {
-                boolean deleted = dataManager.deletePath(worldUid, playerId, duplicate.getPathId());
-                if (deleted) {
-                    deletedCount++;
-                    TrailblazerPlugin.getPluginLogger().info("Deleted duplicate path file: " + duplicate.getPathId() + 
-                        " (" + duplicate.getPathName() + ") for player " + playerId);
-                } else {
-                    TrailblazerPlugin.getPluginLogger().warning("Failed to delete duplicate path file: " + 
-                        duplicate.getPathId() + " for player " + playerId);
-                }
-            }
-            paths.removeAll(pathsToRemove);
-            TrailblazerPlugin.getPluginLogger().info("Removed " + pathsToRemove.size() + " duplicate path(s) " +
-                "(" + deletedCount + " files deleted from disk) for player " + playerId);
-        }
-    }
-
-    private static UUID resolveLineageId(PathData path) {
-        UUID origin = path.getOriginPathId();
-        return origin != null ? origin : path.getPathId();
-    }
 
     /**
      * Handles a client request to start recording a path on the server.
@@ -882,7 +796,6 @@ public class ServerPacketHandler implements Listener, PluginMessageListener {
                 plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
                     UUID worldUid = player.getWorld().getUID();
                     List<PathData> allPaths = dataManager.loadPaths(worldUid, player.getUniqueId());
-                    pruneDuplicateSharedCopies(allPaths, player.getUniqueId(), worldUid);
                     plugin.getServer().getScheduler().runTask(plugin, () -> {
                         sendAllPathData(player, allPaths);
                         player.sendMessage(Component.text("Path saved successfully!", NamedTextColor.GREEN));

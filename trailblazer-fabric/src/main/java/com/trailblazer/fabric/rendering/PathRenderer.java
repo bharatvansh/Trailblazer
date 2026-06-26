@@ -2,22 +2,19 @@ package com.trailblazer.fabric.rendering;
 
 import java.util.List;
 
-import com.mojang.blaze3d.vertex.VertexFormat;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.trailblazer.api.PathData;
 import com.trailblazer.api.Vector3d;
 import com.trailblazer.fabric.ClientPathManager;
 import com.trailblazer.fabric.RenderSettingsManager;
 
-import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext;
-import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.render.BufferBuilder;
-import net.minecraft.client.render.BuiltBuffer;
-import net.minecraft.client.render.RenderLayers;
-import net.minecraft.client.render.Tessellator;
-import net.minecraft.client.render.VertexFormats;
-import net.minecraft.client.world.ClientWorld;
-import net.minecraft.util.math.Vec3d;
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Handles the client-side rendering of paths in the world.
@@ -53,145 +50,134 @@ public class PathRenderer {
 
     public void initialize() {
         // Render late in the main world pass so our overlays aren't immediately overwritten.
-        WorldRenderEvents.END_MAIN.register(this::renderActivePaths);
+        LevelRenderEvents.END_MAIN.register(this::renderActivePaths);
     }
 
-    private void renderActivePaths(WorldRenderContext context) {
-        MinecraftClient client = MinecraftClient.getInstance();
-        ClientWorld world = client.world;
+    private void renderActivePaths(LevelRenderContext context) {
+        Minecraft client = Minecraft.getInstance();
+        ClientLevel world = client.level;
         if (world == null) {
             return;
         }
-        String currentDimension = world.getRegistryKey().getValue().toString();
+        String currentDimension = world.dimension().identifier().toString();
 
-        Vec3d cameraPos = client.gameRenderer.getCamera().getCameraPos();
-        Vec3d cameraForward = getCameraForward(client);
+        Vec3 cameraPos = client.gameRenderer.mainCamera().position();
+        Vec3 cameraForward = getCameraForward(client);
 
         PathData livePath = clientPathManager.getLivePath();
         Iterable<PathData> visiblePaths = clientPathManager.getVisiblePaths();
 
         switch (renderSettingsManager.getRenderMode()) {
-            case SOLID_LINE -> renderSolidLines(currentDimension, livePath, visiblePaths, cameraPos, cameraForward);
-            case DASHED_LINE -> renderDashedLines(currentDimension, livePath, visiblePaths, cameraPos, cameraForward);
-            case SPACED_MARKERS -> renderSpacedMarkers(currentDimension, livePath, visiblePaths, cameraPos, cameraForward);
-            case DIRECTIONAL_ARROWS -> renderDirectionalArrows(currentDimension, livePath, visiblePaths, cameraPos, cameraForward);
+            case SOLID_LINE -> renderSolidLines(context, currentDimension, livePath, visiblePaths, cameraPos, cameraForward);
+            case DASHED_LINE -> renderDashedLines(context, currentDimension, livePath, visiblePaths, cameraPos, cameraForward);
+            case SPACED_MARKERS -> renderSpacedMarkers(context, currentDimension, livePath, visiblePaths, cameraPos, cameraForward);
+            case DIRECTIONAL_ARROWS -> renderDirectionalArrows(context, currentDimension, livePath, visiblePaths, cameraPos, cameraForward);
         }
     }
 
     private void renderDashedLines(
+            LevelRenderContext context,
             String currentDimension,
             PathData livePath,
             Iterable<PathData> visiblePaths,
-            Vec3d cameraPos,
-            Vec3d cameraForward
+            Vec3 cameraPos,
+            Vec3 cameraForward
     ) {
-        Tessellator tess = Tessellator.getInstance();
-        BufferBuilder buffer = tess.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
-
-        if (livePath != null) {
-            appendDashedPath(livePath, true, currentDimension, cameraPos, cameraForward, buffer);
-        }
-        for (PathData path : visiblePaths) {
-            appendDashedPath(path, false, currentDimension, cameraPos, cameraForward, buffer);
-        }
-
-        BuiltBuffer built = buffer.endNullable();
-        if (built == null) {
-            return;
-        }
-        RenderLayers.debugQuads().draw(built);
-        built.close();
+        context.submitNodeCollector().submitCustomGeometry(
+            context.poseStack(),
+            RenderTypes.debugQuads(),
+            (pose, consumer) -> {
+                if (livePath != null) {
+                    appendDashedPath(livePath, true, currentDimension, cameraPos, cameraForward, pose, consumer);
+                }
+                for (PathData path : visiblePaths) {
+                    appendDashedPath(path, false, currentDimension, cameraPos, cameraForward, pose, consumer);
+                }
+            }
+        );
     }
 
     private void renderSolidLines(
+            LevelRenderContext context,
             String currentDimension,
             PathData livePath,
             Iterable<PathData> visiblePaths,
-            Vec3d cameraPos,
-            Vec3d cameraForward
+            Vec3 cameraPos,
+            Vec3 cameraForward
     ) {
-        Tessellator tess = Tessellator.getInstance();
-        BufferBuilder buffer = tess.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
-
-        if (livePath != null) {
-            appendSolidPath(livePath, true, currentDimension, cameraPos, cameraForward, buffer);
-        }
-        for (PathData path : visiblePaths) {
-            appendSolidPath(path, false, currentDimension, cameraPos, cameraForward, buffer);
-        }
-
-        BuiltBuffer built = buffer.endNullable();
-        if (built == null) {
-            return;
-        }
-        RenderLayers.debugQuads().draw(built);
-        built.close();
+        context.submitNodeCollector().submitCustomGeometry(
+            context.poseStack(),
+            RenderTypes.debugQuads(),
+            (pose, consumer) -> {
+                if (livePath != null) {
+                    appendSolidPath(livePath, true, currentDimension, cameraPos, cameraForward, pose, consumer);
+                }
+                for (PathData path : visiblePaths) {
+                    appendSolidPath(path, false, currentDimension, cameraPos, cameraForward, pose, consumer);
+                }
+            }
+        );
     }
 
     private void renderSpacedMarkers(
+            LevelRenderContext context,
             String currentDimension,
             PathData livePath,
             Iterable<PathData> visiblePaths,
-            Vec3d cameraPos,
-            Vec3d cameraForward
+            Vec3 cameraPos,
+            Vec3 cameraForward
     ) {
         double spacing = Math.max(0.25, renderSettingsManager.getMarkerSpacing());
 
-        Vec3d billboardRight = getBillboardRight(cameraForward);
-        Vec3d billboardUp = getBillboardUp(cameraForward, billboardRight);
+        Vec3 billboardRight = getBillboardRight(cameraForward);
+        Vec3 billboardUp = getBillboardUp(cameraForward, billboardRight);
 
-        Tessellator tess = Tessellator.getInstance();
-        BufferBuilder buffer = tess.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
-
-        if (livePath != null) {
-            appendMarkerPath(livePath, true, currentDimension, cameraPos, billboardRight, billboardUp, spacing, buffer);
-        }
-        for (PathData path : visiblePaths) {
-            appendMarkerPath(path, false, currentDimension, cameraPos, billboardRight, billboardUp, spacing, buffer);
-        }
-
-        BuiltBuffer built = buffer.endNullable();
-        if (built == null) {
-            return;
-        }
-        RenderLayers.debugQuads().draw(built);
-        built.close();
+        context.submitNodeCollector().submitCustomGeometry(
+            context.poseStack(),
+            RenderTypes.debugQuads(),
+            (pose, consumer) -> {
+                if (livePath != null) {
+                    appendMarkerPath(livePath, true, currentDimension, cameraPos, billboardRight, billboardUp, spacing, pose, consumer);
+                }
+                for (PathData path : visiblePaths) {
+                    appendMarkerPath(path, false, currentDimension, cameraPos, billboardRight, billboardUp, spacing, pose, consumer);
+                }
+            }
+        );
     }
 
     private void renderDirectionalArrows(
+            LevelRenderContext context,
             String currentDimension,
             PathData livePath,
             Iterable<PathData> visiblePaths,
-            Vec3d cameraPos,
-            Vec3d cameraForward
+            Vec3 cameraPos,
+            Vec3 cameraForward
     ) {
         double spacing = 3.0;
 
-        Tessellator tess = Tessellator.getInstance();
-        BufferBuilder buffer = tess.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
-
-        if (livePath != null) {
-            appendArrowPath(livePath, true, currentDimension, cameraPos, cameraForward, spacing, buffer);
-        }
-        for (PathData path : visiblePaths) {
-            appendArrowPath(path, false, currentDimension, cameraPos, cameraForward, spacing, buffer);
-        }
-
-        BuiltBuffer built = buffer.endNullable();
-        if (built == null) {
-            return;
-        }
-        RenderLayers.debugQuads().draw(built);
-        built.close();
+        context.submitNodeCollector().submitCustomGeometry(
+            context.poseStack(),
+            RenderTypes.debugQuads(),
+            (pose, consumer) -> {
+                if (livePath != null) {
+                    appendArrowPath(livePath, true, currentDimension, cameraPos, cameraForward, spacing, pose, consumer);
+                }
+                for (PathData path : visiblePaths) {
+                    appendArrowPath(path, false, currentDimension, cameraPos, cameraForward, spacing, pose, consumer);
+                }
+            }
+        );
     }
 
     private boolean appendDashedPath(
             PathData path,
             boolean isLive,
             String currentDimension,
-            Vec3d cameraPos,
-            Vec3d cameraForward,
-            BufferBuilder buffer
+            Vec3 cameraPos,
+            Vec3 cameraForward,
+            PoseStack.Pose pose,
+            VertexConsumer consumer
     ) {
         List<Vector3d> points = path.getPoints();
         if (points.size() < 2) {
@@ -280,7 +266,7 @@ public class PathRenderer {
                     double ey = y0 + dirY * e;
                     double ez = z0 + dirZ * e;
 
-                    addRibbonQuad(buffer, sx, sy, sz, ex, ey, ez, camX, camY, camZ, rightX, rightY, rightZ, r, g, b, a);
+                    addRibbonQuad(pose, consumer, sx, sy, sz, ex, ey, ez, camX, camY, camZ, rightX, rightY, rightZ, r, g, b, a);
                     any = true;
                 }
 
@@ -303,9 +289,10 @@ public class PathRenderer {
             PathData path,
             boolean isLive,
             String currentDimension,
-            Vec3d cameraPos,
-            Vec3d cameraForward,
-            BufferBuilder buffer
+            Vec3 cameraPos,
+            Vec3 cameraForward,
+            PoseStack.Pose pose,
+            VertexConsumer consumer
     ) {
         List<Vector3d> points = path.getPoints();
         if (points.size() < 2) {
@@ -378,7 +365,7 @@ public class PathRenderer {
             double rightY = right[1];
             double rightZ = right[2];
 
-            addRibbonQuad(buffer, x0, y0, z0, x1, y1, z1, camX, camY, camZ, rightX, rightY, rightZ, r, g, b, a);
+            addRibbonQuad(pose, consumer, x0, y0, z0, x1, y1, z1, camX, camY, camZ, rightX, rightY, rightZ, r, g, b, a);
             any = true;
 
             x0 = x1;
@@ -393,14 +380,15 @@ public class PathRenderer {
             PathData path,
             boolean isLive,
             String currentDimension,
-            Vec3d cameraPos,
-            Vec3d billboardRight,
-            Vec3d billboardUp,
+            Vec3 cameraPos,
+            Vec3 billboardRight,
+            Vec3 billboardUp,
             double spacing,
-            BufferBuilder buffer
+            PoseStack.Pose pose,
+            VertexConsumer consumer
     ) {
         List<Vector3d> points = path.getPoints();
-        if (points.size() < 1) {
+        if (points.isEmpty()) {
             return false;
         }
 
@@ -426,7 +414,7 @@ public class PathRenderer {
         double y0 = p0.getY();
         double z0 = p0.getZ();
 
-        any |= addBillboardSquare(buffer, x0, y0, z0, camX, camY, camZ, billboardRight, billboardUp, MARKER_HALF_SIZE, r, g, b, a);
+        any |= addBillboardSquare(pose, consumer, x0, y0, z0, camX, camY, camZ, billboardRight, billboardUp, MARKER_HALF_SIZE, r, g, b, a);
 
         double distanceToNext = spacing;
 
@@ -459,7 +447,7 @@ public class PathRenderer {
                 double pz = z0 + dirZ * travelled;
 
                 if (distanceSqToCamera(px, py, pz, camX, camY, camZ) <= MAX_RENDER_DISTANCE_SQ) {
-                    any |= addBillboardSquare(buffer, px, py, pz, camX, camY, camZ, billboardRight, billboardUp, MARKER_HALF_SIZE, r, g, b, a);
+                    any |= addBillboardSquare(pose, consumer, px, py, pz, camX, camY, camZ, billboardRight, billboardUp, MARKER_HALF_SIZE, r, g, b, a);
                 }
 
                 distanceToNext = spacing;
@@ -479,10 +467,11 @@ public class PathRenderer {
             PathData path,
             boolean isLive,
             String currentDimension,
-            Vec3d cameraPos,
-            Vec3d cameraForward,
+            Vec3 cameraPos,
+            Vec3 cameraForward,
             double spacing,
-            BufferBuilder buffer
+            PoseStack.Pose pose,
+            VertexConsumer consumer
     ) {
         List<Vector3d> points = path.getPoints();
         if (points.size() < 2) {
@@ -543,7 +532,7 @@ public class PathRenderer {
                 double pz = z0 + dirZ * travelled;
 
                 if (distanceSqToCamera(px, py, pz, camX, camY, camZ) <= MAX_RENDER_DISTANCE_SQ) {
-                    any |= addArrow(buffer, px, py, pz, dirX, dirY, dirZ, camX, camY, camZ, cameraForward, right, r, g, b, a);
+                    any |= addArrow(pose, consumer, px, py, pz, dirX, dirY, dirZ, camX, camY, camZ, cameraForward, right, r, g, b, a);
                 }
 
                 distanceToNext = spacing;
@@ -560,7 +549,8 @@ public class PathRenderer {
     }
 
     private static void addRibbonQuad(
-            BufferBuilder buffer,
+            PoseStack.Pose pose,
+            VertexConsumer consumer,
             double sx,
             double sy,
             double sz,
@@ -586,22 +576,23 @@ public class PathRenderer {
         double eyr = ey - camY;
         double ezr = ez - camZ;
 
-        buffer.vertex((float) (sxr + rx), (float) (syr + ry), (float) (szr + rz)).color(r, g, b, a);
-        buffer.vertex((float) (sxr - rx), (float) (syr - ry), (float) (szr - rz)).color(r, g, b, a);
-        buffer.vertex((float) (exr - rx), (float) (eyr - ry), (float) (ezr - rz)).color(r, g, b, a);
-        buffer.vertex((float) (exr + rx), (float) (eyr + ry), (float) (ezr + rz)).color(r, g, b, a);
+        consumer.addVertex(pose, (float) (sxr + rx), (float) (syr + ry), (float) (szr + rz)).setColor(r, g, b, a);
+        consumer.addVertex(pose, (float) (sxr - rx), (float) (syr - ry), (float) (szr - rz)).setColor(r, g, b, a);
+        consumer.addVertex(pose, (float) (exr - rx), (float) (eyr - ry), (float) (ezr - rz)).setColor(r, g, b, a);
+        consumer.addVertex(pose, (float) (exr + rx), (float) (eyr + ry), (float) (ezr + rz)).setColor(r, g, b, a);
     }
 
     private static boolean addBillboardSquare(
-            BufferBuilder buffer,
+            PoseStack.Pose pose,
+            VertexConsumer consumer,
             double x,
             double y,
             double z,
             double camX,
             double camY,
             double camZ,
-            Vec3d right,
-            Vec3d up,
+            Vec3 right,
+            Vec3 up,
             double halfSize,
             float r,
             float g,
@@ -624,16 +615,17 @@ public class PathRenderer {
         double yr = y - camY;
         double zr = z - camZ;
 
-        buffer.vertex((float) (xr - rx - ux), (float) (yr - ry - uy), (float) (zr - rz - uz)).color(r, g, b, a);
-        buffer.vertex((float) (xr - rx + ux), (float) (yr - ry + uy), (float) (zr - rz + uz)).color(r, g, b, a);
-        buffer.vertex((float) (xr + rx + ux), (float) (yr + ry + uy), (float) (zr + rz + uz)).color(r, g, b, a);
-        buffer.vertex((float) (xr + rx - ux), (float) (yr + ry - uy), (float) (zr + rz - uz)).color(r, g, b, a);
+        consumer.addVertex(pose, (float) (xr - rx - ux), (float) (yr - ry - uy), (float) (zr - rz - uz)).setColor(r, g, b, a);
+        consumer.addVertex(pose, (float) (xr - rx + ux), (float) (yr - ry + uy), (float) (zr - rz + uz)).setColor(r, g, b, a);
+        consumer.addVertex(pose, (float) (xr + rx + ux), (float) (yr + ry + uy), (float) (zr + rz + uz)).setColor(r, g, b, a);
+        consumer.addVertex(pose, (float) (xr + rx - ux), (float) (yr + ry - uy), (float) (zr + rz - uz)).setColor(r, g, b, a);
 
         return true;
     }
 
     private static boolean addArrow(
-            BufferBuilder buffer,
+            PoseStack.Pose pose,
+            VertexConsumer consumer,
             double x,
             double y,
             double z,
@@ -643,7 +635,7 @@ public class PathRenderer {
             double camX,
             double camY,
             double camZ,
-            Vec3d cameraForward,
+            Vec3 cameraForward,
             double[] right,
             float r,
             float g,
@@ -669,7 +661,8 @@ public class PathRenderer {
         double headBaseZ = z - dirZ * ARROW_HEAD_LENGTH;
 
         addRibbonQuad(
-                buffer,
+                pose,
+                consumer,
                 baseX,
                 baseY,
                 baseZ,
@@ -704,16 +697,16 @@ public class PathRenderer {
         double baseRightY = headBaseY - ry * headHalf;
         double baseRightZ = headBaseZ - rz * headHalf;
 
-        buffer.vertex((float) (tipLeftX - camX), (float) (tipLeftY - camY), (float) (tipLeftZ - camZ)).color(r, g, b, a);
-        buffer.vertex((float) (baseLeftX - camX), (float) (baseLeftY - camY), (float) (baseLeftZ - camZ)).color(r, g, b, a);
-        buffer.vertex((float) (baseRightX - camX), (float) (baseRightY - camY), (float) (baseRightZ - camZ)).color(r, g, b, a);
-        buffer.vertex((float) (tipRightX - camX), (float) (tipRightY - camY), (float) (tipRightZ - camZ)).color(r, g, b, a);
+        consumer.addVertex(pose, (float) (tipLeftX - camX), (float) (tipLeftY - camY), (float) (tipLeftZ - camZ)).setColor(r, g, b, a);
+        consumer.addVertex(pose, (float) (baseLeftX - camX), (float) (baseLeftY - camY), (float) (baseLeftZ - camZ)).setColor(r, g, b, a);
+        consumer.addVertex(pose, (float) (baseRightX - camX), (float) (baseRightY - camY), (float) (baseRightZ - camZ)).setColor(r, g, b, a);
+        consumer.addVertex(pose, (float) (tipRightX - camX), (float) (tipRightY - camY), (float) (tipRightZ - camZ)).setColor(r, g, b, a);
 
         return true;
     }
 
     private static void stableRightVector(
-            Vec3d cameraForward,
+            Vec3 cameraForward,
             double dirX,
             double dirY,
             double dirZ,
@@ -748,10 +741,10 @@ public class PathRenderer {
         out[2] = crossZ * invLen * scale;
     }
 
-    private static Vec3d getCameraForward(MinecraftClient client) {
-        var cam = client.gameRenderer.getCamera();
-        double yaw = Math.toRadians(cam.getYaw());
-        double pitch = Math.toRadians(cam.getPitch());
+    private static Vec3 getCameraForward(Minecraft client) {
+        var cam = client.gameRenderer.mainCamera();
+        double yaw = Math.toRadians(cam.yRot());
+        double pitch = Math.toRadians(cam.xRot());
 
         double x = -Math.sin(yaw) * Math.cos(pitch);
         double y = -Math.sin(pitch);
@@ -759,14 +752,14 @@ public class PathRenderer {
 
         double lenSq = x * x + y * y + z * z;
         if (lenSq < 1.0e-8) {
-            return new Vec3d(0.0, 0.0, 1.0);
+            return new Vec3(0.0, 0.0, 1.0);
         }
 
         double invLen = 1.0 / Math.sqrt(lenSq);
-        return new Vec3d(x * invLen, y * invLen, z * invLen);
+        return new Vec3(x * invLen, y * invLen, z * invLen);
     }
 
-    private static Vec3d getBillboardRight(Vec3d cameraForward) {
+    private static Vec3 getBillboardRight(Vec3 cameraForward) {
         double fx = cameraForward.x;
         double fz = cameraForward.z;
 
@@ -776,14 +769,14 @@ public class PathRenderer {
 
         double lenSq = rx * rx + rz * rz;
         if (lenSq < 1.0e-8) {
-            return new Vec3d(1.0, 0.0, 0.0);
+            return new Vec3(1.0, 0.0, 0.0);
         }
 
         double invLen = 1.0 / Math.sqrt(lenSq);
-        return new Vec3d(rx * invLen, 0.0, rz * invLen);
+        return new Vec3(rx * invLen, 0.0, rz * invLen);
     }
 
-    private static Vec3d getBillboardUp(Vec3d cameraForward, Vec3d cameraRight) {
+    private static Vec3 getBillboardUp(Vec3 cameraForward, Vec3 cameraRight) {
         double fx = cameraForward.x;
         double fy = cameraForward.y;
         double fz = cameraForward.z;
@@ -799,11 +792,11 @@ public class PathRenderer {
 
         double lenSq = ux * ux + uy * uy + uz * uz;
         if (lenSq < 1.0e-8) {
-            return new Vec3d(0.0, 1.0, 0.0);
+            return new Vec3(0.0, 1.0, 0.0);
         }
 
         double invLen = 1.0 / Math.sqrt(lenSq);
-        return new Vec3d(ux * invLen, uy * invLen, uz * invLen);
+        return new Vec3(ux * invLen, uy * invLen, uz * invLen);
     }
 
     private static double distanceSqToCamera(double x, double y, double z, double camX, double camY, double camZ) {

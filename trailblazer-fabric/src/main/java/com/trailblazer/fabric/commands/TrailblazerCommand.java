@@ -21,14 +21,14 @@ import com.trailblazer.fabric.networking.payload.c2s.UpdatePathMetadataPayload;
 import com.trailblazer.fabric.rendering.RenderMode;
 import com.trailblazer.fabric.sharing.PathShareSender;
 
-import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.argument;
-import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
+import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.argument;
+import static net.fabricmc.fabric.api.client.command.v2.ClientCommands.literal;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.ChatFormatting;
 
 public final class TrailblazerCommand {
 
@@ -108,18 +108,18 @@ public final class TrailblazerCommand {
     }
 
     private static int sendHelp(FabricClientCommandSource source) {
-        source.sendFeedback(Text.literal("--- Trailblazer Help ---").formatted(Formatting.GOLD));
-        source.sendFeedback(Text.literal("/trailblazer record [start|stop|cancel|status]").formatted(Formatting.YELLOW).append(Text.literal(" - Recording commands (use 'record' alone to toggle)" ).formatted(Formatting.WHITE)));
-        source.sendFeedback(Text.literal("/trailblazer list").formatted(Formatting.YELLOW).append(Text.literal(" - List your paths").formatted(Formatting.WHITE)));
-        source.sendFeedback(Text.literal("/trailblazer view <name>").formatted(Formatting.YELLOW).append(Text.literal(" - Show a path" ).formatted(Formatting.WHITE)));
-        source.sendFeedback(Text.literal("/trailblazer hide [name]").formatted(Formatting.YELLOW).append(Text.literal(" - Hide path(s)" ).formatted(Formatting.WHITE)));
-        source.sendFeedback(Text.literal("/trailblazer info <name>").formatted(Formatting.YELLOW).append(Text.literal(" - Get path coordinates" ).formatted(Formatting.WHITE)));
-        source.sendFeedback(Text.literal("/trailblazer rename <old> <new>").formatted(Formatting.YELLOW).append(Text.literal(" - Rename a path" ).formatted(Formatting.WHITE)));
-        source.sendFeedback(Text.literal("/trailblazer delete <name>").formatted(Formatting.YELLOW).append(Text.literal(" - Delete a path" ).formatted(Formatting.WHITE)));
-        source.sendFeedback(Text.literal("/trailblazer color <name> <color>").formatted(Formatting.YELLOW).append(Text.literal(" - Change path color" ).formatted(Formatting.WHITE)));
-        source.sendFeedback(Text.literal("/trailblazer share <name> <players>").formatted(Formatting.YELLOW).append(Text.literal(" - Share path with players" ).formatted(Formatting.WHITE)));
-        source.sendFeedback(Text.literal("/trailblazer rendermode <trail|markers|arrows>").formatted(Formatting.YELLOW).append(Text.literal(" - Change render mode" ).formatted(Formatting.WHITE)));
-        source.sendFeedback(Text.literal("Tip: Press M for UI, R to toggle recording, G to cycle render mode").formatted(Formatting.GRAY));
+        source.sendFeedback(Component.literal("--- Trailblazer Help ---").withStyle(ChatFormatting.GOLD));
+        source.sendFeedback(Component.literal("/trailblazer record [start|stop|cancel|status]").withStyle(ChatFormatting.YELLOW).append(Component.literal(" - Recording commands (use 'record' alone to toggle)" ).withStyle(ChatFormatting.WHITE)));
+        source.sendFeedback(Component.literal("/trailblazer list").withStyle(ChatFormatting.YELLOW).append(Component.literal(" - List your paths").withStyle(ChatFormatting.WHITE)));
+        source.sendFeedback(Component.literal("/trailblazer view <name>").withStyle(ChatFormatting.YELLOW).append(Component.literal(" - Show a path" ).withStyle(ChatFormatting.WHITE)));
+        source.sendFeedback(Component.literal("/trailblazer hide [name]").withStyle(ChatFormatting.YELLOW).append(Component.literal(" - Hide path(s)" ).withStyle(ChatFormatting.WHITE)));
+        source.sendFeedback(Component.literal("/trailblazer info <name>").withStyle(ChatFormatting.YELLOW).append(Component.literal(" - Get path coordinates" ).withStyle(ChatFormatting.WHITE)));
+        source.sendFeedback(Component.literal("/trailblazer rename <old> <new>").withStyle(ChatFormatting.YELLOW).append(Component.literal(" - Rename a path" ).withStyle(ChatFormatting.WHITE)));
+        source.sendFeedback(Component.literal("/trailblazer delete <name>").withStyle(ChatFormatting.YELLOW).append(Component.literal(" - Delete a path" ).withStyle(ChatFormatting.WHITE)));
+        source.sendFeedback(Component.literal("/trailblazer color <name> <color>").withStyle(ChatFormatting.YELLOW).append(Component.literal(" - Change path color" ).withStyle(ChatFormatting.WHITE)));
+        source.sendFeedback(Component.literal("/trailblazer share <name> <players>").withStyle(ChatFormatting.YELLOW).append(Component.literal(" - Share path with players" ).withStyle(ChatFormatting.WHITE)));
+        source.sendFeedback(Component.literal("/trailblazer rendermode <trail|markers|arrows>").withStyle(ChatFormatting.YELLOW).append(Component.literal(" - Change render mode" ).withStyle(ChatFormatting.WHITE)));
+        source.sendFeedback(Component.literal("Tip: Press M for UI, R to toggle recording, G to cycle render mode").withStyle(ChatFormatting.GRAY));
         return 1;
     }
 
@@ -152,9 +152,9 @@ public final class TrailblazerCommand {
     }
 
     private static CompletableFuture<Suggestions> suggestPlayerNames(com.mojang.brigadier.context.CommandContext<FabricClientCommandSource> context, SuggestionsBuilder builder) {
-        var handler = net.minecraft.client.MinecraftClient.getInstance().getNetworkHandler();
+        var handler = net.minecraft.client.Minecraft.getInstance().getConnection();
         if (handler != null) {
-            handler.getPlayerList().stream()
+            handler.getOnlinePlayers().stream()
                 .map(p -> p.getProfile().name())
                 .forEach(builder::suggest);
         }
@@ -164,24 +164,24 @@ public final class TrailblazerCommand {
     private static int viewPath(FabricClientCommandSource source, String name) {
         UUID found = findPathIdByName(name);
         if (found == null) {
-            source.sendError(Text.literal("Path not found: " + name));
+            source.sendError(Component.literal("Path not found: " + name));
             return 0;
         }
         pathManager.setPathVisible(found);
-        source.sendFeedback(Text.literal("Showing path: " + name).formatted(Formatting.GREEN));
+        source.sendFeedback(Component.literal("Showing path: " + name).withStyle(ChatFormatting.GREEN));
         return 1;
     }
 
     private static int setColor(FabricClientCommandSource source, String name, String colorArg) {
         UUID found = findPathIdByName(name);
         if (found == null) {
-            source.sendError(Text.literal("Path not found: " + name));
+            source.sendError(Component.literal("Path not found: " + name));
             return 0;
         }
 
         java.util.Optional<Integer> parsed = com.trailblazer.api.PathColors.parse(colorArg);
         if (parsed.isEmpty()) {
-            source.sendError(Text.literal("Invalid color. Use a name or #RRGGBB."));
+            source.sendError(Component.literal("Invalid color. Use a name or #RRGGBB."));
             return 0;
         }
         int color = parsed.get();
@@ -193,7 +193,7 @@ public final class TrailblazerCommand {
             for (PathData p : pathManager.getSharedPaths()) if (p.getPathId().equals(found)) path = p;
         }
         if (path == null) {
-            source.sendError(Text.literal("Path not found: " + name));
+            source.sendError(Component.literal("Path not found: " + name));
             return 0;
         }
 
@@ -202,20 +202,20 @@ public final class TrailblazerCommand {
 
         // If this is a server-owned path, send metadata update to server so it persists
         com.trailblazer.fabric.ClientPathManager.PathOrigin origin = pathManager.getPathOrigin(found);
-        if (origin == com.trailblazer.fabric.ClientPathManager.PathOrigin.SERVER_OWNED && ClientPlayNetworking.canSend(UpdatePathMetadataPayload.ID)) {
+        if (origin == com.trailblazer.fabric.ClientPathManager.PathOrigin.SERVER_OWNED && ClientPlayNetworking.canSend(UpdatePathMetadataPayload.TYPE)) {
             try {
                 ClientPlayNetworking.send(new UpdatePathMetadataPayload(found, path.getPathName(), color));
             } catch (Exception ignored) {}
         }
 
-        source.sendFeedback(Text.literal("Color set to " + com.trailblazer.api.PathColors.nameOrHex(color)).formatted(Formatting.GREEN));
+        source.sendFeedback(Component.literal("Color set to " + com.trailblazer.api.PathColors.nameOrHex(color)).withStyle(ChatFormatting.GREEN));
         return 1;
     }
 
     private static int sharePath(FabricClientCommandSource source, String name, String playersCsv) {
         UUID found = findPathIdByName(name);
         if (found == null) {
-            source.sendError(Text.literal("Path not found: " + name));
+            source.sendError(Component.literal("Path not found: " + name));
             return 0;
         }
 
@@ -225,23 +225,23 @@ public final class TrailblazerCommand {
             for (PathData p : pathManager.getSharedPaths()) if (p.getPathId().equals(found)) path = p;
         }
         if (path == null) {
-            source.sendError(Text.literal("Path not found: " + name));
+            source.sendError(Component.literal("Path not found: " + name));
             return 0;
         }
 
         // resolve player names (comma separated)
         String[] parts = playersCsv.split(",");
         List<UUID> recipients = new ArrayList<>();
-        var handler = net.minecraft.client.MinecraftClient.getInstance().getNetworkHandler();
+        var handler = net.minecraft.client.Minecraft.getInstance().getConnection();
         if (handler == null) {
-            source.sendError(Text.literal("No network handler available."));
+            source.sendError(Component.literal("No network handler available."));
             return 0;
         }
         List<String> matchedNames = new ArrayList<>();
         for (String p : parts) {
             String nameTrim = p.trim();
             if (nameTrim.isEmpty()) continue;
-            for (var entry : handler.getPlayerList()) {
+            for (var entry : handler.getOnlinePlayers()) {
                 if (entry.getProfile().name().equalsIgnoreCase(nameTrim)) {
                     recipients.add(entry.getProfile().id());
                     matchedNames.add(entry.getProfile().name());
@@ -251,15 +251,15 @@ public final class TrailblazerCommand {
         }
 
         if (recipients.isEmpty()) {
-            source.sendError(Text.literal("No valid online players found to share with."));
+            source.sendError(Component.literal("No valid online players found to share with."));
             return 0;
         }
 
         try {
             PathShareSender.sharePath(path, recipients);
-            source.sendFeedback(Text.literal("Share request sent for '" + name + "' to: " + String.join(", ", matchedNames)).formatted(Formatting.GREEN));
+            source.sendFeedback(Component.literal("Share request sent for '" + name + "' to: " + String.join(", ", matchedNames)).withStyle(ChatFormatting.GREEN));
         } catch (Exception ex) {
-            source.sendError(Text.literal("Failed to send share request: " + ex.getMessage()));
+            source.sendError(Component.literal("Failed to send share request: " + ex.getMessage()));
             return 0;
         }
 
@@ -269,17 +269,17 @@ public final class TrailblazerCommand {
     private static int hideOne(FabricClientCommandSource source, String name) {
         UUID found = findPathIdByName(name);
         if (found == null) {
-            source.sendError(Text.literal("Path not found: " + name));
+            source.sendError(Component.literal("Path not found: " + name));
             return 0;
         }
         pathManager.setPathHidden(found);
-        source.sendFeedback(Text.literal("Hid path: " + name).formatted(Formatting.YELLOW));
+        source.sendFeedback(Component.literal("Hid path: " + name).withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 
     private static int hideAll(FabricClientCommandSource source) {
         pathManager.hideAllPaths();
-        source.sendFeedback(Text.literal("All paths hidden.").formatted(Formatting.YELLOW));
+        source.sendFeedback(Component.literal("All paths hidden.").withStyle(ChatFormatting.YELLOW));
         return 1;
     }
 
@@ -295,16 +295,16 @@ public final class TrailblazerCommand {
 
     private static int setRenderMode(FabricClientCommandSource source, String modeInput) {
         if (renderSettingsManager == null) {
-            source.sendError(Text.literal("Render settings are not available."));
+            source.sendError(Component.literal("Render settings are not available."));
             return 0;
         }
         RenderMode mode = MODE_ALIASES.get(modeInput.toLowerCase());
         if (mode == null) {
-            source.sendError(Text.literal("Unknown render mode: " + modeInput));
+            source.sendError(Component.literal("Unknown render mode: " + modeInput));
             return 0;
         }
         renderSettingsManager.setRenderMode(mode);
-        MutableText feedback = Text.literal("Render mode set to ").formatted(Formatting.GREEN)
+        MutableComponent feedback = Component.literal("Render mode set to ").withStyle(ChatFormatting.GREEN)
             .append(mode.getDisplayText().copy());
         source.sendFeedback(feedback);
         return 1;
@@ -339,20 +339,20 @@ public final class TrailblazerCommand {
         if (isRecording) {
             if (useServer) {
                 pathManager.sendStopRecordingRequest(true);
-                source.sendFeedback(Text.literal("Stopping server-side recording...").formatted(Formatting.GREEN));
+                source.sendFeedback(Component.literal("Stopping server-side recording...").withStyle(ChatFormatting.GREEN));
             } else {
                 pathManager.stopRecordingLocal();
-                source.sendFeedback(Text.literal("Stopped local recording.").formatted(Formatting.GREEN));
+                source.sendFeedback(Component.literal("Stopped local recording.").withStyle(ChatFormatting.GREEN));
             }
         } else {
             if (useServer) {
                 com.trailblazer.fabric.TrailblazerFabricClient.LOGGER.info("Toggle command: Using SERVER recording");
                 pathManager.sendStartRecordingRequest(null);
-                source.sendFeedback(Text.literal("Started server-side recording.").formatted(Formatting.GREEN));
+                source.sendFeedback(Component.literal("Started server-side recording.").withStyle(ChatFormatting.GREEN));
             } else {
                 com.trailblazer.fabric.TrailblazerFabricClient.LOGGER.info("Toggle command: Using LOCAL recording");
                 pathManager.startRecordingLocal();
-                source.sendFeedback(Text.literal("Started local recording.").formatted(Formatting.GREEN));
+                source.sendFeedback(Component.literal("Started local recording.").withStyle(ChatFormatting.GREEN));
             }
         }
         return 1;
@@ -360,7 +360,7 @@ public final class TrailblazerCommand {
 
     private static int startRecording(FabricClientCommandSource source) {
         if (pathManager.isRecording()) {
-            source.sendError(Text.literal("Already recording. Use /trailblazer record stop or cancel."));
+            source.sendError(Component.literal("Already recording. Use /trailblazer record stop or cancel."));
             return 0;
         }
         
@@ -370,43 +370,43 @@ public final class TrailblazerCommand {
         if (useServer) {
             com.trailblazer.fabric.TrailblazerFabricClient.LOGGER.info("Command: Using SERVER recording");
             pathManager.sendStartRecordingRequest(null);
-            source.sendFeedback(Text.literal("Started server-side recording.").formatted(Formatting.GREEN));
+            source.sendFeedback(Component.literal("Started server-side recording.").withStyle(ChatFormatting.GREEN));
         } else {
             com.trailblazer.fabric.TrailblazerFabricClient.LOGGER.info("Command: Using LOCAL recording");
             pathManager.startRecordingLocal();
-            source.sendFeedback(Text.literal("Started local recording.").formatted(Formatting.GREEN));
+            source.sendFeedback(Component.literal("Started local recording.").withStyle(ChatFormatting.GREEN));
         }
         return 1;
     }
 
     private static int stopRecording(FabricClientCommandSource source) {
         if (!pathManager.isRecording()) {
-            source.sendError(Text.literal("No active recording."));
+            source.sendError(Component.literal("No active recording."));
             return 0;
         }
         
         if (pathManager.shouldUseServerRecording()) {
             pathManager.sendStopRecordingRequest(true);
-            source.sendFeedback(Text.literal("Stopping server-side recording...").formatted(Formatting.GREEN));
+            source.sendFeedback(Component.literal("Stopping server-side recording...").withStyle(ChatFormatting.GREEN));
         } else {
             pathManager.stopRecordingLocal();
-            source.sendFeedback(Text.literal("Stopped local recording.").formatted(Formatting.GREEN));
+            source.sendFeedback(Component.literal("Stopped local recording.").withStyle(ChatFormatting.GREEN));
         }
         return 1;
     }
 
     private static int cancelRecording(FabricClientCommandSource source) {
         if (!pathManager.isRecording()) {
-            source.sendError(Text.literal("No active recording."));
+            source.sendError(Component.literal("No active recording."));
             return 0;
         }
         
         if (pathManager.shouldUseServerRecording()) {
             pathManager.sendStopRecordingRequest(false);
-            source.sendFeedback(Text.literal("Cancelling server-side recording (discarded path).").formatted(Formatting.YELLOW));
+            source.sendFeedback(Component.literal("Cancelling server-side recording (discarded path).").withStyle(ChatFormatting.YELLOW));
         } else {
             pathManager.cancelRecordingLocal();
-            source.sendFeedback(Text.literal("Cancelled local recording (discarded path).").formatted(Formatting.YELLOW));
+            source.sendFeedback(Component.literal("Cancelled local recording (discarded path).").withStyle(ChatFormatting.YELLOW));
         }
         return 1;
     }
@@ -431,7 +431,7 @@ public final class TrailblazerCommand {
         } else {
             label = "Not recording.";
         }
-        source.sendFeedback(Text.literal(label).formatted(Formatting.GRAY));
+        source.sendFeedback(Component.literal(label).withStyle(ChatFormatting.GRAY));
         return 1;
     }
 
@@ -459,31 +459,31 @@ public final class TrailblazerCommand {
             }
         }
 
-        source.sendFeedback(Text.literal("--- Your Paths ---").formatted(Formatting.GOLD));
+        source.sendFeedback(Component.literal("--- Your Paths ---").withStyle(ChatFormatting.GOLD));
         if (localPaths.isEmpty()) {
-            source.sendFeedback(Text.literal("No locally-owned paths.").formatted(Formatting.GRAY));
+            source.sendFeedback(Component.literal("No locally-owned paths.").withStyle(ChatFormatting.GRAY));
         } else {
             localPaths.forEach(path -> source.sendFeedback(formatListEntry(path)));
         }
 
-        source.sendFeedback(Text.literal("--- Shared With You ---").formatted(Formatting.GOLD));
+        source.sendFeedback(Component.literal("--- Shared With You ---").withStyle(ChatFormatting.GOLD));
         if (serverShares.isEmpty()) {
-            source.sendFeedback(Text.literal("No shared paths loaded.").formatted(Formatting.GRAY));
+            source.sendFeedback(Component.literal("No shared paths loaded.").withStyle(ChatFormatting.GRAY));
         } else {
             serverShares.forEach(path -> source.sendFeedback(formatListEntry(path)));
         }
         return 1;
     }
 
-    private static Text formatListEntry(PathData path) {
+    private static Component formatListEntry(PathData path) {
         PathOrigin origin = pathManager.getPathOrigin(path.getPathId());
         String originLabel = switch (origin) {
             case LOCAL -> " (Local)";
             case SERVER_OWNED -> " (Server copy)";
             case SERVER_SHARED -> " (Server share)";
         };
-        return Text.literal(path.getPathName()).formatted(Formatting.YELLOW)
-            .append(Text.literal(originLabel).formatted(Formatting.GRAY));
+        return Component.literal(path.getPathName()).withStyle(ChatFormatting.YELLOW)
+            .append(Component.literal(originLabel).withStyle(ChatFormatting.GRAY));
     }
 
     private static int showInfo(FabricClientCommandSource source, String name) {
@@ -495,22 +495,22 @@ public final class TrailblazerCommand {
                 .findFirst());
 
         if (pathOpt.isEmpty()) {
-            source.sendError(Text.literal("Path not found: " + name));
+            source.sendError(Component.literal("Path not found: " + name));
             return 0;
         }
 
         PathData path = pathOpt.get();
         java.util.List<com.trailblazer.api.Vector3d> points = path.getPoints();
         if (points.isEmpty()) {
-            source.sendFeedback(Text.literal("Path '" + name + "' has no points.").formatted(Formatting.YELLOW));
+            source.sendFeedback(Component.literal("Path '" + name + "' has no points.").withStyle(ChatFormatting.YELLOW));
             return 1;
         }
         com.trailblazer.api.Vector3d start = points.get(0);
         com.trailblazer.api.Vector3d end = points.get(points.size() - 1);
 
-        source.sendFeedback(Text.literal("--- Info for " + name + " ---").formatted(Formatting.GOLD));
-        source.sendFeedback(Text.literal("Start: ").formatted(Formatting.GRAY).append(Text.literal(String.format("%.1f, %.1f, %.1f", start.getX(), start.getY(), start.getZ())).formatted(Formatting.WHITE)));
-        source.sendFeedback(Text.literal("End:   ").formatted(Formatting.GRAY).append(Text.literal(String.format("%.1f, %.1f, %.1f", end.getX(), end.getY(), end.getZ())).formatted(Formatting.WHITE)));
+        source.sendFeedback(Component.literal("--- Info for " + name + " ---").withStyle(ChatFormatting.GOLD));
+        source.sendFeedback(Component.literal("Start: ").withStyle(ChatFormatting.GRAY).append(Component.literal(String.format("%.1f, %.1f, %.1f", start.getX(), start.getY(), start.getZ())).withStyle(ChatFormatting.WHITE)));
+        source.sendFeedback(Component.literal("End:   ").withStyle(ChatFormatting.GRAY).append(Component.literal(String.format("%.1f, %.1f, %.1f", end.getX(), end.getY(), end.getZ())).withStyle(ChatFormatting.WHITE)));
         return 1;
     }
 
@@ -520,7 +520,7 @@ public final class TrailblazerCommand {
             .findFirst();
 
         if (pathOpt.isEmpty()) {
-            source.sendError(Text.literal("Path not found: " + name));
+            source.sendError(Component.literal("Path not found: " + name));
             return 0;
         }
 
@@ -531,23 +531,23 @@ public final class TrailblazerCommand {
         switch (origin) {
             case LOCAL -> {
                 pathManager.deletePath(pathId);
-                source.sendFeedback(Text.literal("Deleted path locally: " + name).formatted(Formatting.GREEN));
+                source.sendFeedback(Component.literal("Deleted path locally: " + name).withStyle(ChatFormatting.GREEN));
             }
             case SERVER_OWNED, SERVER_SHARED -> {
                 // If server supports delete payload, request server deletion for SERVER_OWNED paths.
-                if (origin == PathOrigin.SERVER_OWNED && ClientPlayNetworking.canSend(com.trailblazer.fabric.networking.payload.c2s.DeletePathPayload.ID)) {
+                if (origin == PathOrigin.SERVER_OWNED && ClientPlayNetworking.canSend(com.trailblazer.fabric.networking.payload.c2s.DeletePathPayload.TYPE)) {
                     try {
                         ClientPlayNetworking.send(new com.trailblazer.fabric.networking.payload.c2s.DeletePathPayload(pathId));
-                        source.sendFeedback(Text.literal("Requested server deletion for: " + name).formatted(Formatting.YELLOW));
+                        source.sendFeedback(Component.literal("Requested server deletion for: " + name).withStyle(ChatFormatting.YELLOW));
                     } catch (Exception ignored) {
                         // Fallback: remove locally from client list if send fails
                         pathManager.removeServerPath(pathId);
-                        source.sendFeedback(Text.literal("Removed server-synced path from your list: " + name).formatted(Formatting.YELLOW));
+                        source.sendFeedback(Component.literal("Removed server-synced path from your list: " + name).withStyle(ChatFormatting.YELLOW));
                     }
                 } else {
                     // For server-shared (or when server delete not supported) just remove client-side entry
                     pathManager.removeServerPath(pathId);
-                    source.sendFeedback(Text.literal("Removed server-synced path from your list: " + name).formatted(Formatting.YELLOW));
+                    source.sendFeedback(Component.literal("Removed server-synced path from your list: " + name).withStyle(ChatFormatting.YELLOW));
                 }
             }
         }
@@ -560,13 +560,13 @@ public final class TrailblazerCommand {
             .findFirst();
 
         if (pathOpt.isEmpty()) {
-            source.sendError(Text.literal("Path not found: " + oldName));
+            source.sendError(Component.literal("Path not found: " + oldName));
             return 0;
         }
 
         String trimmed = newName.trim();
         if (trimmed.isEmpty()) {
-            source.sendError(Text.literal("New name cannot be empty."));
+            source.sendError(Component.literal("New name cannot be empty."));
             return 0;
         }
 
@@ -575,24 +575,24 @@ public final class TrailblazerCommand {
         PathOrigin origin = pathManager.getPathOrigin(pathId);
 
         if (origin == PathOrigin.SERVER_SHARED) {
-            source.sendError(Text.literal("Server-shared paths cannot be renamed locally."));
+            source.sendError(Component.literal("Server-shared paths cannot be renamed locally."));
             return 0;
         }
 
         if (origin == PathOrigin.SERVER_OWNED) {
             // Request server-side rename so server persists authoritative name
-            if (ClientPlayNetworking.canSend(UpdatePathMetadataPayload.ID)) {
+            if (ClientPlayNetworking.canSend(UpdatePathMetadataPayload.TYPE)) {
                 try {
                     // send current color back along with requested name
                     ClientPlayNetworking.send(new UpdatePathMetadataPayload(pathId, trimmed, path.getColorArgb()));
-                    source.sendFeedback(Text.literal("Requested server rename for '" + oldName + "' -> '" + trimmed + "'.").formatted(Formatting.GREEN));
+                    source.sendFeedback(Component.literal("Requested server rename for '" + oldName + "' -> '" + trimmed + "'.").withStyle(ChatFormatting.GREEN));
                     return 1;
                 } catch (Exception ex) {
-                    source.sendError(Text.literal("Failed to send rename request: " + ex.getMessage()));
+                    source.sendError(Component.literal("Failed to send rename request: " + ex.getMessage()));
                     return 0;
                 }
             } else {
-                source.sendError(Text.literal("Server does not support remote rename."));
+                source.sendError(Component.literal("Server does not support remote rename."));
                 return 0;
             }
         }
@@ -600,13 +600,13 @@ public final class TrailblazerCommand {
         boolean nameTaken = pathManager.getMyPaths().stream()
             .anyMatch(p -> !p.getPathId().equals(pathId) && p.getPathName().equalsIgnoreCase(trimmed));
         if (nameTaken) {
-            source.sendError(Text.literal("A path with that name already exists."));
+            source.sendError(Component.literal("A path with that name already exists."));
             return 0;
         }
 
         path.setPathName(trimmed);
         pathManager.onPathUpdated(path);
-        source.sendFeedback(Text.literal("Renamed '" + oldName + "' to '" + trimmed + "'.").formatted(Formatting.GREEN));
+        source.sendFeedback(Component.literal("Renamed '" + oldName + "' to '" + trimmed + "'.").withStyle(ChatFormatting.GREEN));
         return 1;
     }
 }

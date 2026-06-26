@@ -89,6 +89,24 @@ public class PathData implements Serializable {
         return sharedWith;
     }
 
+    public boolean isSharedWith(UUID player) {
+        return sharedWith != null && sharedWith.contains(player);
+    }
+
+    public boolean addShare(UUID player) {
+        if (sharedWith != null && !sharedWith.contains(player)) {
+            return sharedWith.add(player);
+        }
+        return false;
+    }
+
+    public boolean removeShare(UUID player) {
+        if (sharedWith != null) {
+            return sharedWith.remove(player);
+        }
+        return false;
+    }
+
     public UUID getOriginPathId() {
         return originPathId;
     }

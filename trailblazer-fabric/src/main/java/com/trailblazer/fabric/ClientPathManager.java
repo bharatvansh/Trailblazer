@@ -17,8 +17,8 @@ import com.trailblazer.fabric.networking.payload.c2s.StopRecordingPayload;
 import com.trailblazer.fabric.persistence.PathPersistenceManager;
 
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.player.Player;
 
 /**
  * Manages client-side path storage and recording.
@@ -161,7 +161,7 @@ public class ClientPathManager {
 
     public void startRecordingLocal() {
         if (recording) return;
-        MinecraftClient client = MinecraftClient.getInstance();
+        Minecraft client = Minecraft.getInstance();
         if (client == null || client.player == null) {
             TrailblazerFabricClient.LOGGER.warn("Cannot start recording: client not ready");
             return;
@@ -169,10 +169,10 @@ public class ClientPathManager {
         TrailblazerFabricClient.LOGGER.info("Starting LOCAL recording");
         recording = true;
         UUID id = UUID.randomUUID();
-        UUID ownerUuid = localPlayerUuid != null ? localPlayerUuid : (client.getSession() != null ? client.getSession().getUuidOrNull() : UUID.randomUUID());
+        UUID ownerUuid = localPlayerUuid != null ? localPlayerUuid : (client.getUser() != null ? client.getUser().getProfileId() : UUID.randomUUID());
         String ownerName = resolveLocalPlayerName("Player");
-        String dimension = client.world != null
-            ? client.world.getRegistryKey().getValue().toString()
+        String dimension = client.level != null
+            ? client.level.dimension().identifier().toString()
             : "minecraft:overworld";
         localRecording = new PathData(id, "Path-" + indexToLetters(nextPathIndex), ownerUuid, ownerName, System.currentTimeMillis(), dimension, new ArrayList<>());
         addMyPath(localRecording);
@@ -216,15 +216,15 @@ public class ClientPathManager {
      * after connection, but if server is plugin-enabled, it should support all our channels.
      */
     public boolean shouldUseServerRecording() {
-        MinecraftClient client = MinecraftClient.getInstance();
+        Minecraft client = Minecraft.getInstance();
         
         boolean hasBridge = ServerIntegrationBridge.SERVER_INTEGRATION != null;
         boolean serverSupported = hasBridge && ServerIntegrationBridge.SERVER_INTEGRATION.isServerSupported();
-        boolean isMultiplayer = client == null || client.getServer() == null;
+        boolean isMultiplayer = client == null || client.getSingleplayerServer() == null;
         
         // Try to check if we can send, but don't require it - if server is plugin-enabled,
         // it should support the channel even if canSend() returns false due to timing
-        boolean canSendPayload = ClientPlayNetworking.canSend(StartRecordingPayload.ID);
+        boolean canSendPayload = ClientPlayNetworking.canSend(StartRecordingPayload.TYPE);
         
         // If server is plugin-enabled and we're in multiplayer, use server recording
         // We trust that if handshake succeeded, server supports our channels
@@ -335,10 +335,10 @@ public class ClientPathManager {
     }
 
     /** Called each client tick to append points when recording locally. */
-    public void tickRecording(MinecraftClient client) {
+    public void tickRecording(Minecraft client) {
         if (!recording || localRecording == null) return;
         if (client == null || client.player == null) return;
-        PlayerEntity player = client.player;
+        Player player = client.player;
         Vector3d current = new Vector3d(player.getX(), player.getY() + TRAIL_Y_OFFSET, player.getZ());
         List<Vector3d> pts = localRecording.getPoints();
         if (pts.isEmpty()) {
@@ -424,8 +424,8 @@ public class ClientPathManager {
         // When receiving sync from a plugin-enabled server, clear all local paths
         // This prevents path bleeding when the client had previously stored paths locally
         // (e.g., from old plugin-less sessions or different worlds)
-        MinecraftClient client = MinecraftClient.getInstance();
-        boolean isMultiplayer = client == null || client.getServer() == null;
+        Minecraft client = Minecraft.getInstance();
+        boolean isMultiplayer = client == null || client.getSingleplayerServer() == null;
         if (isMultiplayer && ServerIntegrationBridge.SERVER_INTEGRATION != null 
             && ServerIntegrationBridge.SERVER_INTEGRATION.isServerSupported()) {
             TrailblazerFabricClient.LOGGER.info("Clearing local paths for plugin-enabled server");
@@ -575,9 +575,9 @@ public class ClientPathManager {
     }
 
     private String resolveLocalPlayerName(String fallback) {
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client != null && client.getSession() != null) {
-            String username = client.getSession().getUsername();
+        Minecraft client = Minecraft.getInstance();
+        if (client != null && client.getUser() != null) {
+            String username = client.getUser().getName();
             if (username != null && !username.isBlank()) {
                 return username;
             }

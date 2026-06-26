@@ -23,20 +23,20 @@ import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 public class TrailblazerNetworking {
 
     public static void registerPayloadTypes() {
-        PayloadTypeRegistry.playS2C().register(PathDataSyncPayload.ID, PathDataSyncPayload.CODEC);
-        PayloadTypeRegistry.playS2C().register(HideAllPathsPayload.ID, HideAllPathsPayload.CODEC);
-        PayloadTypeRegistry.playS2C().register(LivePathUpdatePayload.ID, LivePathUpdatePayload.CODEC);
-        PayloadTypeRegistry.playS2C().register(StopLivePathPayload.ID, StopLivePathPayload.CODEC);
-        PayloadTypeRegistry.playS2C().register(SharedPathPayload.ID, SharedPathPayload.CODEC);
-        PayloadTypeRegistry.playS2C().register(PathDeletedPayload.ID, PathDeletedPayload.CODEC);
-        PayloadTypeRegistry.playS2C().register(PathActionResultPayload.ID, PathActionResultPayload.CODEC);
-        PayloadTypeRegistry.playS2C().register(com.trailblazer.fabric.networking.payload.s2c.StartRecordingPayload.ID, com.trailblazer.fabric.networking.payload.s2c.StartRecordingPayload.CODEC);
-        PayloadTypeRegistry.playC2S().register(DeletePathPayload.ID, DeletePathPayload.CODEC);
-        PayloadTypeRegistry.playC2S().register(HandshakePayload.ID, HandshakePayload.CODEC);
-        PayloadTypeRegistry.playC2S().register(PathActionAckPayload.ID, PathActionAckPayload.CODEC);
-        PayloadTypeRegistry.playC2S().register(SharePathRequestPayload.ID, SharePathRequestPayload.CODEC);
-        PayloadTypeRegistry.playC2S().register(UpdatePathMetadataPayload.ID, UpdatePathMetadataPayload.CODEC);
-        PayloadTypeRegistry.playC2S().register(StartRecordingPayload.ID, StartRecordingPayload.CODEC);
-        PayloadTypeRegistry.playC2S().register(StopRecordingPayload.ID, StopRecordingPayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(PathDataSyncPayload.TYPE, PathDataSyncPayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(HideAllPathsPayload.TYPE, HideAllPathsPayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(LivePathUpdatePayload.TYPE, LivePathUpdatePayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(StopLivePathPayload.TYPE, StopLivePathPayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(SharedPathPayload.TYPE, SharedPathPayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(PathDeletedPayload.TYPE, PathDeletedPayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(PathActionResultPayload.TYPE, PathActionResultPayload.CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(com.trailblazer.fabric.networking.payload.s2c.StartRecordingPayload.TYPE, com.trailblazer.fabric.networking.payload.s2c.StartRecordingPayload.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(DeletePathPayload.TYPE, DeletePathPayload.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(HandshakePayload.TYPE, HandshakePayload.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(PathActionAckPayload.TYPE, PathActionAckPayload.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(SharePathRequestPayload.TYPE, SharePathRequestPayload.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(UpdatePathMetadataPayload.TYPE, UpdatePathMetadataPayload.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(StartRecordingPayload.TYPE, StartRecordingPayload.CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(StopRecordingPayload.TYPE, StopRecordingPayload.CODEC);
     }
 }

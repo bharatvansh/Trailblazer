@@ -20,7 +20,7 @@ public class ServerIntegrationManager {
 
     public void registerLifecycle() {
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
-            serverSupported.set(ClientPlayNetworking.canSend(com.trailblazer.fabric.networking.payload.c2s.HandshakePayload.ID));
+            serverSupported.set(ClientPlayNetworking.canSend(com.trailblazer.fabric.networking.payload.c2s.HandshakePayload.TYPE));
             LOGGER.info("Trailblazer server support detected? {}", serverSupported.get());
         });
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {

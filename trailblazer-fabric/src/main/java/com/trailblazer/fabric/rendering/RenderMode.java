@@ -1,21 +1,21 @@
 package com.trailblazer.fabric.rendering;
 
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
+import net.minecraft.network.chat.Component;
+import net.minecraft.ChatFormatting;
 
 /**
  * Path visualization modes.
  */
 public enum RenderMode {
-    SOLID_LINE("Solid Line", Formatting.GREEN),
-    DASHED_LINE("Dashed Line", Formatting.GREEN),
-    SPACED_MARKERS("Spaced Markers", Formatting.YELLOW),
-    DIRECTIONAL_ARROWS("Directional Arrows", Formatting.AQUA);
+    SOLID_LINE("Solid Line", ChatFormatting.GREEN),
+    DASHED_LINE("Dashed Line", ChatFormatting.GREEN),
+    SPACED_MARKERS("Spaced Markers", ChatFormatting.YELLOW),
+    DIRECTIONAL_ARROWS("Directional Arrows", ChatFormatting.AQUA);
 
     private final String displayName;
-    private final Formatting displayColor;
+    private final ChatFormatting displayColor;
 
-    RenderMode(String displayName, Formatting displayColor) {
+    RenderMode(String displayName, ChatFormatting displayColor) {
         this.displayName = displayName;
         this.displayColor = displayColor;
     }
@@ -26,7 +26,7 @@ public enum RenderMode {
         return values[nextOrdinal];
     }
 
-    public Text getDisplayText() {
-        return Text.literal(this.displayName).formatted(this.displayColor);
+    public Component getDisplayText() {
+        return Component.literal(this.displayName).withStyle(this.displayColor);
     }
 }

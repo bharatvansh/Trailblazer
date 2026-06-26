@@ -12,9 +12,9 @@ import com.trailblazer.fabric.TrailblazerFabricClient;
 import com.trailblazer.fabric.networking.payload.c2s.SharePathRequestPayload;
 
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
+import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
+import net.minecraft.ChatFormatting;
 
 /**
  * Utility responsible for packaging a path into a share payload and sending it to the relay server.
@@ -42,12 +42,11 @@ public final class PathShareSender {
         byte[] jsonBytes = json.getBytes(StandardCharsets.UTF_8);
         if (jsonBytes.length > MAX_JSON_BYTES) {
             TrailblazerFabricClient.LOGGER.warn("Refusing to share path '{}' because payload is too large: {} bytes", path.getPathName(), jsonBytes.length);
-            MinecraftClient client = MinecraftClient.getInstance();
+            Minecraft client = Minecraft.getInstance();
             if (client != null && client.player != null) {
-            client.player.sendMessage(
-                Text.literal("Path is too large to share (" + jsonBytes.length + " bytes). Try reducing points / splitting the path.")
-                    .formatted(Formatting.RED),
-                false
+            client.player.sendSystemMessage(
+                Component.literal("Path is too large to share (" + jsonBytes.length + " bytes). Try reducing points / splitting the path.")
+                    .withStyle(ChatFormatting.RED)
             );
             }
             return;
